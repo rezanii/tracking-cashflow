@@ -1,0 +1,100 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: tracking-cashflow-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MSSQL_PID: Developer
+    ports:
+      # Published on SQLSERVER_HOST_PORT so a SQL Server already installed on the host
+      # can keep 1433. Inside the network the port is always 1433.
+      - "${SQLSERVER_HOST_PORT:-1433}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      # The container is only useful once it answers a query, not merely once the port opens.
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  # Creates the database, applies the schema and loads development data, then exits.
+  # The backend waits for it so a first start comes up against a ready schema.
+  migrate:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+      target: tools
+    container_name: tracking-cashflow-migrate
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: ${DB_USER:-sa}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-financial_management}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["/app/entrypoint.sh"]
+    restart: "no"
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: tracking-cashflow-backend
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: 8080
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: ${DB_USER:-sa}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-financial_management}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/api", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time because Next.js inlines NEXT_PUBLIC_* into the bundle.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
+    container_name: tracking-cashflow-frontend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:

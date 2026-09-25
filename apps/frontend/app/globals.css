@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Native date inputs are easier to reach when the whole control opens the picker. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}

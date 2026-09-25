@@ -1,0 +1,30 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+/apps/backend/bin/
+*.exe
+*.test
+*.out
+coverage.out
+
+# Node
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated reports produced while testing exports
+*.xlsx
+*.pdf
+!docs/**/*.pdf
