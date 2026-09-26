@@ -29,22 +29,47 @@ type authService struct {
 	tokens *utils.TokenManager
 	// inviteCode gates registration; empty means registration is open.
 	inviteCode string
+	// inviteCodeHash is a bcrypt hash of the same code and wins when both are set.
+	inviteCodeHash string
 }
 
-func NewAuthService(users repository.UserRepository, tokens *utils.TokenManager, inviteCode string) AuthService {
-	return &authService{users: users, tokens: tokens, inviteCode: inviteCode}
-}
-
-// checkInvite gates registration when an invite code is configured. Comparison is
-// constant-time so a wrong code cannot be narrowed down one character at a time.
-func (s *authService) checkInvite(provided string) error {
-	if s.inviteCode == "" {
-		return nil
+func NewAuthService(
+	users repository.UserRepository,
+	tokens *utils.TokenManager,
+	inviteCode string,
+	inviteCodeHash string,
+) AuthService {
+	return &authService{
+		users:          users,
+		tokens:         tokens,
+		inviteCode:     inviteCode,
+		inviteCodeHash: inviteCodeHash,
 	}
-	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(provided)), []byte(s.inviteCode)) != 1 {
-		return utils.NewFieldError("Validation failed", map[string]string{
-			"invite_code": "invite code is not valid",
-		})
+}
+
+// errInvalidInvite is one message for every failure: a missing, wrong or expired-looking code
+// all read the same, so the response reveals nothing about the code itself.
+var errInvalidInvite = utils.NewFieldError("Validation failed", map[string]string{
+	"invite_code": "invite code is not valid",
+})
+
+// checkInvite gates registration when an invite code is configured, by hash when one is
+// available and by the plaintext otherwise. Both comparisons take the same time whatever the
+// input, so a wrong code cannot be narrowed down one character at a time.
+func (s *authService) checkInvite(provided string) error {
+	code := strings.TrimSpace(provided)
+
+	switch {
+	case s.inviteCodeHash != "":
+		// bcrypt compares in constant time for a given hash and is deliberately slow, which
+		// also blunts guessing on top of the rate limit in front of this endpoint.
+		if bcrypt.CompareHashAndPassword([]byte(s.inviteCodeHash), []byte(code)) != nil {
+			return errInvalidInvite
+		}
+	case s.inviteCode != "":
+		if subtle.ConstantTimeCompare([]byte(code), []byte(s.inviteCode)) != 1 {
+			return errInvalidInvite
+		}
 	}
 	return nil
 }

@@ -926,11 +926,35 @@ password.
 body, compared in constant time, and checked before the email lookup so a wrong code cannot be
 used to discover which emails are already registered.
 
-```dotenv
-REGISTER_INVITE_CODE=<a long random value>
+Store a **hash**, not the code:
+
+```bash
+cd apps/backend
+go run ./cmd/invitehash          # prompts for the code, prints the bcrypt hash
 ```
 
-Leaving it empty keeps registration open, which is what local development wants. The web app
+```dotenv
+REGISTER_INVITE_CODE_HASH=$2a$12$...
+```
+
+`REGISTER_INVITE_CODE_HASH` wins over the plaintext `REGISTER_INVITE_CODE`, which stays only as
+a convenience for local development. The hash is what a deployed instance should carry: whoever
+reads the environment — a dashboard screenshot, a leaked log, a support session — learns the
+hash, and bcrypt cannot be reversed into the code.
+
+Three things guard the code, and none of them is secrecy of the source:
+
+- **Never in source.** A committed secret is not a secret, and this repository is public. It
+  lives in the environment, and only there.
+- **bcrypt at cost 12** is deliberately slow, so each guess costs real time.
+- **10 attempts per minute per IP** on `/auth/register`, already in place for password guessing.
+
+Every rejection returns the same message whether the code was missing, short, long or simply
+wrong, so the response reveals nothing about it. `cmd/invitehash` reads the code from the
+terminal rather than an argument, because an argument would land in the shell history and the
+process list.
+
+Leaving both empty keeps registration open, which is what local development wants. The web app
 always shows the field and lets the API decide whether it is required.
 
 ### 3. Backend

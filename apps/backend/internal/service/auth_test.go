@@ -16,7 +16,7 @@ func newAuthService(t *testing.T) (AuthService, *fakeUserRepository, *utils.Toke
 	t.Helper()
 	users := newFakeUserRepository()
 	tokens := utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour)
-	return NewAuthService(users, tokens, ""), users, tokens
+	return NewAuthService(users, tokens, "", ""), users, tokens
 }
 
 func TestRegisterStoresOnlyAHash(t *testing.T) {
@@ -173,7 +173,7 @@ func TestMeReturnsTheUser(t *testing.T) {
 func TestLoginSurfacesRepositoryFailureAsUnauthorized(t *testing.T) {
 	users := newFakeUserRepository()
 	users.failOn = "FindByEmail"
-	service := NewAuthService(users, utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour), "")
+	service := NewAuthService(users, utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour), "", "")
 
 	_, err := service.Login(context.Background(), dto.LoginRequest{Email: "user@example.com", Password: "Admin123!"})
 	if err == nil {
@@ -193,7 +193,7 @@ func TestLoginSurfacesRepositoryFailureAsUnauthorized(t *testing.T) {
 // before the email lookup, so a wrong code cannot be used to discover which emails exist.
 func TestRegisterRequiresTheInviteCodeWhenConfigured(t *testing.T) {
 	users := newFakeUserRepository()
-	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "undangan-rahasia")
+	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "undangan-rahasia", "")
 
 	valid := dto.RegisterRequest{Name: "Orang Baru", Email: "baru@example.com", Password: "Passw0rd!"}
 
@@ -240,11 +240,73 @@ func TestRegisterRequiresTheInviteCodeWhenConfigured(t *testing.T) {
 // Without a configured code the endpoint stays open, which is what local development uses.
 func TestRegisterStaysOpenWithoutAnInviteCode(t *testing.T) {
 	users := newFakeUserRepository()
-	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "")
+	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "", "")
 
 	if _, err := service.Register(context.Background(), dto.RegisterRequest{
 		Name: "Orang Baru", Email: "baru@example.com", Password: "Passw0rd!",
 	}); err != nil {
 		t.Fatalf("Register returned error: %v", err)
+	}
+}
+
+// A hashed code is what a deployed instance should carry: whoever reads the environment
+// learns the hash, and a bcrypt hash cannot be turned back into the code.
+func TestRegisterAcceptsAHashedInviteCode(t *testing.T) {
+	const code = "kode-otorisasi-yang-panjang"
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(code), bcryptCost)
+	if err != nil {
+		t.Fatalf("hash invite code: %v", err)
+	}
+
+	users := newFakeUserRepository()
+	tokens := utils.NewTokenManager("0123456789012345678901234567890123", time.Hour)
+	// The plaintext is deliberately wrong here: the hash has to win over it.
+	service := NewAuthService(users, tokens, "kode-plaintext-yang-salah", string(hash))
+
+	valid := dto.RegisterRequest{Name: "Diundang", Email: "diundang@example.com", Password: "Passw0rd!"}
+
+	t.Run("wrong code refused", func(t *testing.T) {
+		request := valid
+		request.InviteCode = "kode-plaintext-yang-salah"
+
+		if _, err := service.Register(context.Background(), request); err == nil {
+			t.Fatal("the plaintext was accepted although a hash is configured")
+		}
+		if len(users.users) != 0 {
+			t.Fatal("a user was created")
+		}
+	})
+
+	t.Run("correct code accepted", func(t *testing.T) {
+		request := valid
+		request.InviteCode = code
+
+		if _, err := service.Register(context.Background(), request); err != nil {
+			t.Fatalf("Register returned error: %v", err)
+		}
+	})
+}
+
+// Every rejection must read the same, so the response cannot be used to learn anything about
+// the configured code.
+func TestInviteRejectionIsIndistinguishable(t *testing.T) {
+	users := newFakeUserRepository()
+	tokens := utils.NewTokenManager("0123456789012345678901234567890123", time.Hour)
+	service := NewAuthService(users, tokens, "kode-benar", "")
+
+	messages := map[string]bool{}
+	for _, code := range []string{"", "k", "kode-bena", "kode-benarX", "sama sekali lain"} {
+		_, err := service.Register(context.Background(), dto.RegisterRequest{
+			Name: "Uji", Email: "uji@example.com", Password: "Passw0rd!", InviteCode: code,
+		})
+		domainErr, ok := utils.AsDomainError(err)
+		if !ok {
+			t.Fatalf("code %q produced %v, want a domain error", code, err)
+		}
+		messages[domainErr.Message+"|"+domainErr.Fields["invite_code"]] = true
+	}
+	if len(messages) != 1 {
+		t.Fatalf("rejections differ between inputs: %v", messages)
 	}
 }

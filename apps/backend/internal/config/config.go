@@ -34,7 +34,15 @@ type Config struct {
 	// RegisterInviteCode closes public registration when set. Empty leaves it open, which is
 	// what local development wants; a deployed instance should set it, or anyone who finds
 	// the site can create an account on it.
+	//
+	// Never put the value in source: the repository is readable, and a committed secret is not
+	// a secret. It belongs in the environment.
 	RegisterInviteCode string
+	// RegisterInviteCodeHash is a bcrypt hash of the same code and takes precedence over the
+	// plaintext. Preferred for a deployed instance: whoever reads the environment — a
+	// dashboard screenshot, a leaked log, a support session — learns the hash and not the
+	// code, and a bcrypt hash cannot be reversed into one.
+	RegisterInviteCodeHash string
 
 	Telegram TelegramConfig
 }
@@ -122,16 +130,17 @@ func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		AppEnv:             envString("APP_ENV", "development"),
-		DBHost:             envString("DB_HOST", "localhost"),
-		DBUser:             envString("DB_USER", ""),
-		DBPassword:         envString("DB_PASSWORD", ""),
-		DBName:             envString("DB_NAME", ""),
-		DBSSLMode:          envString("DB_SSLMODE", "disable"),
-		DatabaseURL:        envString("DATABASE_URL", ""),
-		JWTSecret:          envString("JWT_SECRET", ""),
-		CORSAllowedOrigins: envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
-		RegisterInviteCode: envString("REGISTER_INVITE_CODE", ""),
+		AppEnv:                 envString("APP_ENV", "development"),
+		DBHost:                 envString("DB_HOST", "localhost"),
+		DBUser:                 envString("DB_USER", ""),
+		DBPassword:             envString("DB_PASSWORD", ""),
+		DBName:                 envString("DB_NAME", ""),
+		DBSSLMode:              envString("DB_SSLMODE", "disable"),
+		DatabaseURL:            envString("DATABASE_URL", ""),
+		JWTSecret:              envString("JWT_SECRET", ""),
+		CORSAllowedOrigins:     envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
+		RegisterInviteCode:     envString("REGISTER_INVITE_CODE", ""),
+		RegisterInviteCodeHash: envString("REGISTER_INVITE_CODE_HASH", ""),
 		Telegram: TelegramConfig{
 			BotToken:      envString("TELEGRAM_BOT_TOKEN", ""),
 			Mode:          TelegramMode(strings.ToLower(envString("TELEGRAM_MODE", string(TelegramModeOff)))),
