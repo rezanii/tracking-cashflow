@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -547,5 +548,37 @@ func TestTelegramWebhookIsClosedWhenTheBotIsOff(t *testing.T) {
 	response, _ := h.request(http.MethodPost, "/telegram/webhook", map[string]any{"update_id": 1}, false)
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 while the bot is off", response.StatusCode)
+	}
+}
+
+// A webhook update must be handled before the response is written. Answering first and doing
+// the work in a detached goroutine loses the update on a serverless host, where the instance
+// is frozen as soon as the response is sent.
+func TestTelegramWebhookHandlesBeforeResponding(t *testing.T) {
+	source, err := os.ReadFile("../internal/handler/telegram.go")
+	if err != nil {
+		t.Fatalf("read handler: %v", err)
+	}
+
+	handler := string(source)
+	start := strings.Index(handler, "func (h *TelegramHandler) Webhook(")
+	if start < 0 {
+		t.Fatal("Webhook handler not found")
+	}
+	body := handler[start:]
+	if end := strings.Index(body, "\n}\n"); end > 0 {
+		body = body[:end]
+	}
+
+	call := strings.Index(body, "h.telegram.HandleUpdate(")
+	respond := strings.Index(body, `utils.OK(w, "Accepted"`)
+	if call < 0 || respond < 0 {
+		t.Fatalf("expected both a HandleUpdate call and an Accepted response:\n%s", body)
+	}
+	if call > respond {
+		t.Fatal("HandleUpdate runs after the response; a serverless host freezes the instance first")
+	}
+	if strings.Contains(body, "go func()") {
+		t.Fatal("the update is dispatched to a goroutine, which does not survive on a serverless host")
 	}
 }

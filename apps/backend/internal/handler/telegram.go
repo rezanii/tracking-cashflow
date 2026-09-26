@@ -18,8 +18,9 @@ import (
 // webhookMaxBody caps what an unauthenticated endpoint will read into memory.
 const webhookMaxBody = 1 << 20
 
-// webhookWorkTimeout bounds the work started by one update. The HTTP response is sent first,
-// so this is not tied to the request context.
+// webhookWorkTimeout bounds the work one update may do before the response is sent. It is
+// generous because building a report and delivering it crosses the network twice, and because
+// Telegram retrying is cheaper than losing the update.
 const webhookWorkTimeout = 30 * time.Second
 
 type TelegramHandler struct {
@@ -178,13 +179,14 @@ func (h *TelegramHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Telegram waits for the response and retries on a timeout, so the answer goes out first
-	// and the work runs on its own context, detached from the request.
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), webhookWorkTimeout)
-		defer cancel()
-		h.telegram.HandleUpdate(ctx, update)
-	}()
+	// Handled before responding, deliberately. Answering first and doing the work in a
+	// detached goroutine is faster on a long-lived server, but on a serverless host the
+	// instance is frozen the moment the response is written and the goroutine never finishes —
+	// the update is acknowledged and silently dropped. Telegram tolerates a slow response and
+	// retries on a timeout, which is the far better failure mode.
+	ctx, cancel := context.WithTimeout(r.Context(), webhookWorkTimeout)
+	defer cancel()
+	h.telegram.HandleUpdate(ctx, update)
 
 	utils.OK(w, "Accepted", nil)
 }
