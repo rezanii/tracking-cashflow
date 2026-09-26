@@ -6,7 +6,9 @@
   # This is a monorepo, so the build runs inside the frontend workspace.
   base    = "apps/frontend"
   command = "npm run build"
-  publish = ".next"
+  # Relative to the repository root, not to base: Netlify resolves publish from the root even
+  # when base is set, and a bare ".next" sends it looking in the wrong directory.
+  publish = "apps/frontend/.next"
 
 [build.environment]
   NODE_VERSION = "22"

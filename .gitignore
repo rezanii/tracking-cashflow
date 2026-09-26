@@ -35,3 +35,6 @@ Thumbs.db
 # runs it, so ignoring that would leave a fresh clone unable to build the schema.
 /database/migrations/
 .neon
+
+# Local Netlify folder
+.netlify
