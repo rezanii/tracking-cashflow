@@ -26,10 +26,25 @@ const (
 // helpText is sent for /help and for anything the bot does not recognise.
 const helpText = `Perintah yang tersedia:
 
+MEMBACA
 /report - laporan cash flow hari ini
-/report 2026-09-25 - laporan untuk tanggal tertentu
+/report 2026-09-25 - laporan tanggal tertentu
 /saldo - saldo tercatat per akun
 /status - status koneksi chat ini
+
+MENCATAT
+/saldo <akun> <jumlah> - catat saldo aktual hari ini
+/saldo <akun> <jumlah> 2026-09-25 - untuk tanggal tertentu
+/catat <akun> <jumlah> <keterangan> - catat pengeluaran
+/topup <akun> <jumlah> - alokasi dana ke akun
+/topup <akun> <jumlah> dari <akun-sumber> - tentukan sumbernya
+/hapus <id> - hapus transaksi yang salah
+
+Jumlah boleh pakai titik atau singkatan: 25000, 25.000, 25rb, 1jt.
+Mencatat saldo di tanggal yang sama akan menimpa, jadi salah ketik
+cukup dikirim ulang dengan angka yang benar.
+
+LAINNYA
 /unlink - lepas koneksi chat ini
 /help - pesan ini`
 
@@ -51,6 +66,11 @@ type telegramService struct {
 	links    repository.TelegramRepository
 	reports  DailyReportService
 	accounts repository.AccountRepository
+	// Writes go through the same services the HTTP handlers use, so a command cannot skip
+	// the ownership checks or the validation.
+	accountWrites     AccountService
+	transactionWrites TransactionService
+	categories        repository.CategoryRepository
 	// codeTTL bounds how long an unused pairing code stays valid.
 	codeTTL time.Duration
 	// webhookURL and webhookSecret are only set in webhook mode.
@@ -64,20 +84,26 @@ func NewTelegramService(
 	links repository.TelegramRepository,
 	reports DailyReportService,
 	accounts repository.AccountRepository,
+	accountWrites AccountService,
+	transactionWrites TransactionService,
+	categories repository.CategoryRepository,
 	codeTTL time.Duration,
 	webhookURL string,
 	webhookSecret string,
 	useWebhook bool,
 ) TelegramService {
 	return &telegramService{
-		client:        client,
-		links:         links,
-		reports:       reports,
-		accounts:      accounts,
-		codeTTL:       codeTTL,
-		webhookURL:    webhookURL,
-		webhookSecret: webhookSecret,
-		useWebhook:    useWebhook,
+		client:            client,
+		links:             links,
+		reports:           reports,
+		accounts:          accounts,
+		accountWrites:     accountWrites,
+		transactionWrites: transactionWrites,
+		categories:        categories,
+		codeTTL:           codeTTL,
+		webhookURL:        webhookURL,
+		webhookSecret:     webhookSecret,
+		useWebhook:        useWebhook,
 	}
 }
 
@@ -232,7 +258,18 @@ func (s *telegramService) HandleUpdate(ctx context.Context, update dto.TelegramU
 	case "report":
 		s.handleReport(ctx, link, argument)
 	case "saldo":
-		s.handleBalances(ctx, link)
+		// With no argument this lists balances; with one it records a new one.
+		if strings.TrimSpace(argument) == "" {
+			s.handleBalances(ctx, link)
+			return
+		}
+		s.handleRecordBalance(ctx, link, argument)
+	case "catat":
+		s.handleRecordExpense(ctx, link, argument)
+	case "topup":
+		s.handleTopUp(ctx, link, argument)
+	case "hapus":
+		s.handleDelete(ctx, link, argument)
 	case "status":
 		s.reply(ctx, chatID, fmt.Sprintf("Chat ini terhubung sejak %s.", link.LinkedAt.Format("2006-01-02 15:04 UTC")))
 	case "unlink":

@@ -86,14 +86,16 @@ func run() error {
 	}
 	defer closeDatabase(db)
 
+	httpHandler, telegram := router.NewWithTelegram(cfg, db)
+
 	// The bot is optional: with TELEGRAM_MODE=off the API serves exactly as before.
 	botCtx, stopBot := context.WithCancel(context.Background())
 	defer stopBot()
-	startTelegram(botCtx, cfg, db)
+	startTelegram(botCtx, cfg, telegram)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.AppPort),
-		Handler:           router.New(cfg, db),
+		Handler:           httpHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      2 * time.Minute, // report exports stream a generated file
@@ -137,18 +139,11 @@ func run() error {
 // startTelegram verifies the bot token, reconciles the webhook with the configured mode and,
 // in polling mode, starts the update loop. A failure here is logged and the API still serves:
 // the bot is an add-on, not a dependency of the HTTP surface.
-func startTelegram(ctx context.Context, cfg config.Config, db *gorm.DB) {
+func startTelegram(ctx context.Context, cfg config.Config, telegram service.TelegramService) {
 	if !cfg.Telegram.Enabled() {
 		slog.Info("telegram integration disabled", "mode", cfg.Telegram.Mode)
 		return
 	}
-
-	telegram := router.NewTelegramService(
-		cfg,
-		repository.NewTelegramRepository(db),
-		service.NewDailyReportService(repository.NewDailyReportRepository(db), repository.NewAccountRepository(db)),
-		repository.NewAccountRepository(db),
-	)
 
 	configureCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

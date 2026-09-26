@@ -39,30 +39,17 @@ func webhookSecret(cfg config.Config) string {
 	return cfg.Telegram.WebhookSecret
 }
 
-// NewTelegramService builds the bot service from configuration. It is exported from this
-// package so cmd/api can start the poller with the same instance the router serves.
-func NewTelegramService(
-	cfg config.Config,
-	links repository.TelegramRepository,
-	reports service.DailyReportService,
-	accounts repository.AccountRepository,
-) service.TelegramService {
-	client := service.NewTelegramClient(cfg.Telegram.BotToken, cfg.Telegram.APIBaseURL)
-	return service.NewTelegramService(
-		client,
-		links,
-		reports,
-		accounts,
-		cfg.Telegram.PairingCodeTTL,
-		cfg.Telegram.WebhookURL,
-		cfg.Telegram.WebhookSecret,
-		cfg.Telegram.Mode == config.TelegramModeWebhook,
-	)
-}
-
 // New wires the dependency graph and returns the HTTP handler. Construction happens once at
 // startup, so every request reuses the same services and connection pool.
 func New(cfg config.Config, db *gorm.DB) http.Handler {
+	handler, _ := NewWithTelegram(cfg, db)
+	return handler
+}
+
+// NewWithTelegram also returns the bot service, so cmd/api can run the poller against the
+// very instance the HTTP routes use instead of building a second one with its own
+// dependency list that could drift.
+func NewWithTelegram(cfg config.Config, db *gorm.DB) (http.Handler, service.TelegramService) {
 	tokens := utils.NewTokenManager(cfg.JWTSecret, cfg.JWTExpiration)
 	requestValidator := validator.New()
 
@@ -81,7 +68,21 @@ func New(cfg config.Config, db *gorm.DB) http.Handler {
 	transactionService := service.NewTransactionService(transactions, categories, accounts, txManager)
 	reportService := service.NewReportService(reports, transactions)
 	dailyReportService := service.NewDailyReportService(dailyReports, accounts)
-	telegramService := NewTelegramService(cfg, telegramLinks, dailyReportService, accounts)
+	telegramService := service.NewTelegramService(
+		service.NewTelegramClient(cfg.Telegram.BotToken, cfg.Telegram.APIBaseURL),
+		telegramLinks,
+		dailyReportService,
+		accounts,
+		// Writes from the chat go through the same services the HTTP handlers use, so the
+		// ownership checks and validation cannot be bypassed by talking to the bot.
+		accountService,
+		transactionService,
+		categories,
+		cfg.Telegram.PairingCodeTTL,
+		cfg.Telegram.WebhookURL,
+		cfg.Telegram.WebhookSecret,
+		cfg.Telegram.Mode == config.TelegramModeWebhook,
+	)
 
 	authHandler := handler.NewAuthHandler(authService, requestValidator)
 	categoryHandler := handler.NewCategoryHandler(categoryService, requestValidator)
@@ -195,5 +196,5 @@ func New(cfg config.Config, db *gorm.DB) http.Handler {
 		utils.Error(w, http.StatusMethodNotAllowed, "Method not allowed", nil)
 	})
 
-	return r
+	return r, telegramService
 }

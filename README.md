@@ -364,7 +364,7 @@ make test         # unit tests, and integration tests when a database is reachab
 make test-cover   # same, with a total coverage figure
 ```
 
-80 test functions in all.
+93 test functions in all.
 
 Unit tests cover the money arithmetic, paging, the sort allow list, JWT handling, and the
 auth, category, transaction, report and daily-report services against in-memory fakes. The
@@ -500,6 +500,13 @@ the same table, repeating the header on every page.
 - **Nothing sends the report on a schedule.** Delivery is pulled (`/report` in the chat) or
   pushed on request (`POST /telegram/send/daily-report`). A nightly send needs a scheduler,
   which is a cron entry or a job runner, not a code change.
+- **A chat-recorded expense always lands in one category** (`Kebutuhan Harian`) and on today's
+  date. Choosing a category or a past date from the chat is not supported; edit the row in the
+  web app instead.
+- **`/topup` guesses the source only when there is exactly one bank account.** With several it
+  asks rather than picking, so the money cannot land in the wrong place silently.
+- **Amounts from the chat are whole rupiah.** Decimals are refused, because `1.5` and `1.500`
+  cannot both be honoured without risking a tenfold error.
 - **The daily report covers one day.** There is no weekly or monthly variant of it, and no
   Excel or PDF export of it — the existing exports cover the cash-flow report instead.
 - **The opening balance is derived, not stored.** It is the cash flow accounts' opening
@@ -523,8 +530,8 @@ the same table, repeating the header on every page.
    container so the integration tests run there too.
 8. **Attachment upload** for receipts, kept out of the database itself.
 9. **Scheduled delivery** of the daily report, with the send time set per user.
-10. **Recording spending from the chat**, so `/expense 25000 kopi` writes a transaction instead
-    of only reading them back.
+10. **Category and date on a chat-recorded expense**, so `/catat` does not always file under
+    one category on today's date.
 
 ## 13. Daily cash flow report and Telegram
 
@@ -585,7 +592,42 @@ A chat id proves nothing — anyone can find a bot and message it — so the bot
 unlinked chat with nothing but "not linked". The code is single-use, short-lived, and comes
 from `crypto/rand`.
 
-Commands: `/report` (today), `/report 2026-09-25`, `/saldo`, `/status`, `/unlink`, `/help`.
+### Commands
+
+Reading:
+
+| Command | Does |
+| --- | --- |
+| `/report` | today's report |
+| `/report 2026-09-25` | a given day |
+| `/saldo` | recorded balance per account |
+| `/status` | connection status |
+
+Writing — these change the database, and the bot replies with what was stored plus the
+variance it produces, so a typo is visible immediately:
+
+| Command | Does |
+| --- | --- |
+| `/saldo Dompet Harian 72500` | records the balance the account actually holds today |
+| `/saldo Bank Utama 20000 2026-09-25` | same, for an earlier day |
+| `/catat Dompet Harian 25000 kopi` | records an expense |
+| `/topup Dompet Harian 600000` | transfers into the account from the bank |
+| `/topup Dompet Harian 600000 dari BCA` | names the source explicitly |
+| `/hapus 42` | deletes a transaction recorded by mistake |
+
+Account names may contain spaces and need no quoting: the longest matching name wins, so
+`Dana Cadangan` is never mistaken for `Dana`. Amounts accept `25000`, `25.000`, `25rb`, `1jt`.
+**Separators are validated as thousand groups, not stripped** — `1.5jt` is refused rather than
+silently read as 15.000.000.
+
+Recording a balance twice for the same day overwrites it, so correcting a typo is just sending
+the command again. `/catat` files the expense under `Kebutuhan Harian`, created on demand, and
+it can be recategorised later in the web app. `/catat` prints the row's id, which is what
+`/hapus` takes.
+
+Every write goes through the same services the HTTP handlers use, so the ownership checks and
+validation cannot be bypassed by talking to the bot: an account or transaction id belonging to
+somebody else reads as missing. A chat that is not paired is refused every command.
 
 ### Polling or webhook
 

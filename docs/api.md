@@ -272,5 +272,21 @@ to post forged updates. With no secret configured the endpoint returns 404 rathe
 open. It is rate limited because it is publicly reachable, and it answers before doing the
 work, because Telegram retries anything slow.
 
-Bot commands: `/start <code>`, `/report [YYYY-MM-DD]`, `/saldo`, `/status`, `/unlink`, `/help`.
-A chat with no link is told only that it is not linked — not whether an account exists.
+### Bot commands
+
+Reading: `/start <code>`, `/report [YYYY-MM-DD]`, `/saldo`, `/status`, `/unlink`, `/help`.
+
+Writing: `/saldo <akun> <jumlah> [tanggal]`, `/catat <akun> <jumlah> <keterangan>`,
+`/topup <akun> <jumlah> [dari <akun>]`, `/hapus <id>`.
+
+The write commands call the same `AccountService` and `TransactionService` the HTTP handlers
+use, so ownership and validation hold identically — another user's account or transaction id
+reads as missing. A chat with no link is told only that it is not linked, never whether an
+account exists.
+
+Account names are matched longest-first so names with spaces need no quoting. Amounts accept
+plain digits, validated thousand groups (`600.000`) and the suffixes `rb`/`ribu`/`k`/`jt`/
+`juta`; anything ambiguous such as `1.5jt` is refused rather than guessed, because guessing
+writes a wrong amount. Each write is answered with the stored figure and the recomputed
+variance, and re-recording a balance for the same day overwrites it, so a typo is corrected by
+repeating the command.

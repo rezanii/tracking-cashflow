@@ -17,10 +17,34 @@ const testChatID int64 = 987654321
 const markdownV2Specials = "_[]()~`>#+-=|{}.!"
 
 func newTelegramScenario() (TelegramService, *fakeTelegramClient, *fakeTelegramRepository) {
+	service, client, links, _, _ := newTelegramWriteScenario()
+	return service, client, links
+}
+
+// newTelegramWriteScenario also exposes the stores the write commands touch, so a test can
+// assert what actually landed rather than only what was replied.
+func newTelegramWriteScenario() (TelegramService, *fakeTelegramClient, *fakeTelegramRepository, *fakeAccountRepository, *fakeTransactionRepository) {
 	reports, _, accounts := newReportScenario()
+	categories := newFakeCategoryRepository()
+	transactions := newFakeTransactionRepository(categories)
 	client := &fakeTelegramClient{}
 	links := newFakeTelegramRepository()
-	return NewTelegramService(client, links, reports, accounts, 15*time.Minute, "", "", false), client, links
+
+	// The bot writes through the same services the HTTP handlers use.
+	accountService := NewAccountService(accounts)
+	transactionService := NewTransactionService(transactions, categories, accounts, &fakeTxManager{})
+
+	return NewTelegramService(
+		client,
+		links,
+		reports,
+		accounts,
+		accountService,
+		transactionService,
+		categories,
+		15*time.Minute,
+		"", "", false,
+	), client, links, accounts, transactions
 }
 
 // A rendered report has to be valid MarkdownV2 or Telegram rejects the whole message, so
