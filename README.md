@@ -23,5 +23,5 @@ docker compose up -d
 Frontend on `FRONTEND_HOST_PORT` (3000 by default), API on `APP_HOST_PORT` (8080), Swagger at
 `/swagger/index.html`. Development login: `admin@example.com` / `Admin123!`.
 
-Deploying: Netlify or Vercel for the frontend, Render or Railway for the API, any managed
-Postgres for the database — see [§14 Deploying](docs/README.md#14-deploying).
+Deploying: Netlify for the frontend, Vercel or a Hugging Face Docker Space for the API, Neon for the
+database — see [§14 Deploying](docs/README.md#14-deploying).

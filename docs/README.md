@@ -783,7 +783,7 @@ backend wants a host that runs a container.
 | Piece | Host | Why |
 | --- | --- | --- |
 | Next.js frontend | **Netlify** or Vercel | static assets and SSR, which is what they are built for |
-| Go API | **Render**, Railway or Fly | needs a process that stays alive; the Telegram poller holds a long poll open |
+| Go API | **a container host** | needs a process that stays alive; the Telegram poller holds a long poll open |
 | Postgres | **Neon** or Supabase | any managed Postgres; the choice is independent of the frontend host |
 | Local development | Docker Postgres | unaffected by a Neon link: `DATABASE_URL` lands in the root `.env`, which compose does not pass to the containers |
 
@@ -791,19 +791,48 @@ Netlify cannot host the Go API: its functions are short-lived and are not a Go r
 poller has nowhere to live and the API has no process to be. Splitting the two is not a
 workaround — it is the shape these platforms are built for, and it needs no code changes.
 
+#### Picking a container host
+
+Free tiers move, and two of the obvious names are no longer usable:
+
+| Host | Card required | Note |
+| --- | --- | --- |
+| **Vercel** (Go runtime) | no | Hobby plan, non-commercial. Its Go preset names `chi` explicitly and detects `cmd/api/main.go`, which is this project's entrypoint. Requires webhook mode. Go runtime is Beta and may be gated on an account. |
+| **Hugging Face Spaces** (Docker) | no | free Docker Space, sleeps when idle and wakes on request. Signup can fail with a `418` on some networks. |
+| **Cloudflare Tunnel** to your own machine | no | no signup gate at all and no code change, but the API is only up while that machine is. |
+| Render | free tier says no, but the deploy flow asks for one | `New → Web Service` avoids the Blueprint path; worth one try |
+| Koyeb | effectively yes | the free Starter plan is being withdrawn after the Mistral acquisition, and new signups cannot get it |
+| Fly.io | yes | no free tier for new users |
+| Railway | trial credit only | fine while the credit lasts |
+| Google Cloud Run, Oracle | yes | generous free usage, but a billing account is mandatory |
+
+The API is an ordinary Go HTTP server in a container, so moving between them is a configuration
+change rather than a rewrite — and the proxy below means the frontend is not rebuilt when it
+moves.
+
 ### Recommended shape
 
 ```
-Vercel / Netlify          Render / Railway / Fly        Neon / Supabase
-┌──────────────┐          ┌──────────────────┐          ┌────────────┐
-│  Next.js     │ ───────► │   Go / chi       │ ───────► │  Postgres  │
-│  (static +   │  HTTPS   │   (container,    │   TLS    │  (managed) │
-│   SSR)       │          │    always on)    │          └────────────┘
-└──────────────┘          └──────────────────┘
+Netlify                      Hugging Face Space            Neon
+┌──────────────┐             ┌──────────────────┐          ┌────────────┐
+│  Next.js     │             │   Go / chi       │          │  Postgres  │
+│              │  /api/*     │   (container,    │   TLS    │  (managed) │
+│  proxy ──────┼────────────►│    port 7860)    │ ────────►│            │
+└──────────────┘   HTTPS     └──────────────────┘          └────────────┘
 ```
 
-Nothing in the code changes for this. The backend `Dockerfile` is what Render and Railway
-build, and the poller keeps working because the process keeps running.
+The frontend calls **`/api/v1`**, a relative path on its own origin, and `netlify.toml` rewrites
+`/api/*` to the backend. This is worth understanding, because it removes three problems at once:
+
+- **No rebuild when the backend moves.** Next.js bakes `NEXT_PUBLIC_*` into the bundle, so an
+  absolute backend URL is frozen at build time. A relative one never changes; the backend's
+  address lives in one line of `netlify.toml`.
+- **No CORS.** The browser sees a single origin, so `CORS_ALLOWED_ORIGINS` stops mattering for
+  the browser (keep it correct anyway — it still guards direct calls).
+- **No mixed content.** An `http://` backend called from an `https://` page is blocked by
+  browsers; proxied through Netlify, the browser only ever speaks HTTPS.
+
+Nothing in the application code changes for any of this.
 
 ### 1. Database
 
@@ -890,25 +919,82 @@ password.
 
 ### 3. Backend
 
-Point the platform at `apps/backend/Dockerfile`. It already runs as non-root and carries its
-own healthcheck, which probes `/health` through the binary because the image has no curl.
+Two things are true of every option, because the API is serverless or sleeping on all of the
+free ones:
 
-```dotenv
-APP_ENV=production
-APP_PORT=8080          # or whatever the platform injects as $PORT
-JWT_SECRET=<32+ random characters>
-CORS_ALLOWED_ORIGINS=https://<your-frontend-domain>
+- **`TELEGRAM_MODE=webhook`, never `polling`.** A poller holds a long request open for the life
+  of the process; a serverless function has no such life, and a sleeping container has no
+  process. Telegram retries a webhook, and the retry itself wakes the host.
+- **Use the pooled database URL.** Each invocation or wake-up opens its own connections, and
+  direct connections exhaust a free Postgres quickly.
+
+#### Vercel (Go runtime)
+
+Vercel's Go preset fits this project without a code change: it names `chi` explicitly, detects
+`cmd/api/main.go`, and requires the server to listen on `PORT` — which the config does, taking
+`PORT` when `APP_PORT` is absent.
+
+Deploy `apps/backend` as its **own Vercel project**, separate from the frontend, because Vercel
+requires `go.mod` at the project root:
+
+```
+Root Directory: apps/backend
+Framework Preset: Go
 ```
 
-`JWT_SECRET` shorter than 32 characters is refused in production. `CORS_ALLOWED_ORIGINS` has
-to name the real frontend origin: with the default `http://localhost:3000` the deployed
-frontend's requests are rejected by the browser.
+`apps/backend/vercel.json` already sets the preset and the build flags. Environment variables go
+in the project settings: `APP_ENV=production`, `DATABASE_URL` (pooled), `JWT_SECRET` (32+
+characters), `CORS_ALLOWED_ORIGINS`, and the `TELEGRAM_*` values.
 
-### 4. Frontend
+The Go runtime is **Beta** and its docs are marked as requiring permissions, so it may not be
+enabled on every account. If the preset is missing, use one of the options below.
 
-`netlify.toml` at the repo root already carries the monorepo settings, so connecting the
-repository is enough — Netlify reads the base directory, the build command and the Next.js
-plugin from it:
+#### Hugging Face Space (Docker)
+
+A Space is its own git repository, so the backend code is pushed there. Rather than keeping a
+second copy in this repo, `deploy/huggingface/sync.sh` assembles the Space contents from
+`apps/backend` plus `deploy/huggingface/README.md`, which carries the Space front-matter:
+
+```bash
+# Create the Space first, in the browser: huggingface.co/new-space
+#   SDK: Docker · Template: Blank · Hardware: CPU basic (free)
+hf auth login                       # or export HF_TOKEN=<write token>
+make hf-sync HF_SPACE_URL=https://huggingface.co/spaces/<user>/tracking-cashflow-api
+```
+
+The script removes files that no longer exist in `apps/backend` instead of letting them linger
+and be built, then pushes; the Space rebuilds on its own.
+
+Configuration goes in **Settings → Variables and secrets** — the table in
+`deploy/huggingface/README.md` lists every name. The one that is easy to get wrong is
+`APP_PORT=7860`, which must match `app_port` in the front-matter, because Spaces routes traffic
+to exactly that port.
+
+#### Cloudflare Tunnel to a machine you control
+
+The stack already runs under Docker Compose. A tunnel gives it a public HTTPS address without a
+signup gate, a card, or any change to the application:
+
+```bash
+cloudflared tunnel --url http://localhost:8090
+```
+
+A quick tunnel's hostname changes on every restart, which matters less here than it would
+otherwise: the frontend calls a relative `/api/v1`, so only the one line in `netlify.toml` has to
+follow. A stable hostname needs a named tunnel, which needs a domain on Cloudflare.
+
+The obvious limitation is that the API is up only while that machine is.
+
+#### Whichever host
+
+`APP_ENV=production` makes the config refuse a `JWT_SECRET` under 32 characters and refuse a
+database connection without TLS. Both are deliberate. The image runs as a non-root user and
+carries a health check that probes `/health` through the binary, because the image has no curl.
+
+### 4. Frontend — Netlify
+
+`netlify.toml` at the repo root carries the monorepo settings, the relative API base URL and the
+proxy, so connecting the repository is nearly enough:
 
 ```toml
 [build]
@@ -916,26 +1002,32 @@ plugin from it:
   command = "npm run build"
   publish = ".next"
 
+[build.environment]
+  NEXT_PUBLIC_API_URL = "/api/v1"
+
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://BACKEND_ORIGIN/api/:splat"
+  status = 200
+  force  = true
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 ```
 
-Set one build-time variable in the Netlify UI (**Site settings → Environment variables**):
+**Replace `BACKEND_ORIGIN`** with the Space's host, which looks like
+`<user>-tracking-cashflow-api.hf.space`. That one line is the only place the backend's address
+appears.
 
-```dotenv
-NEXT_PUBLIC_API_URL=https://<your-backend-domain>/api/v1
-```
-
-Next.js inlines `NEXT_PUBLIC_*` into the bundle, so this is **baked at build time**. Changing
-it needs a redeploy, not a restart.
-
-Vercel needs no config file: point it at `apps/frontend` as the root directory and set the same
-variable.
+`status = 200` with `force = true` makes it a rewrite rather than a redirect, so the browser
+never learns the backend's address and never leaves the Netlify origin.
 
 > **`output: "standalone"` is opt-in**, via `NEXT_OUTPUT=standalone`, which only the Dockerfile
 > sets. Netlify and Vercel build their own adapter output, and forcing standalone there deploys
-> a site that serves nothing. If you add a build step of your own, do not set that variable
-> unless you are building the container.
+> a site that serves nothing.
+
+Vercel needs no config file: point it at `apps/frontend` as the root directory, set
+`NEXT_PUBLIC_API_URL=/api/v1`, and add an equivalent rewrite in `vercel.json`.
 
 ### 5. Telegram
 
@@ -946,7 +1038,7 @@ container.
 ```dotenv
 TELEGRAM_MODE=webhook
 TELEGRAM_BOT_TOKEN=<token>
-TELEGRAM_WEBHOOK_URL=https://<your-backend-domain>/api/v1/telegram/webhook
+TELEGRAM_WEBHOOK_URL=https://<user>-tracking-cashflow-api.hf.space/api/v1/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=<long random value>
 ```
 

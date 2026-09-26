@@ -1,6 +1,7 @@
-# Netlify hosts the frontend only. The Go API needs a host that runs a long-lived process
-# (Render, Railway, Fly): the Telegram poller holds a connection open for the life of the
-# process, which a short-lived function cannot do.
+# Netlify hosts the frontend only. The Go API runs elsewhere, as a container: the Telegram
+# poller holds a long poll open for the life of the process, which a short-lived function
+# cannot do. The API is reached through the /api proxy below, so which host it lives on is a
+# one-line change here.
 [build]
   # This is a monorepo, so the build runs inside the frontend workspace.
   base    = "apps/frontend"
@@ -10,6 +11,21 @@
 [build.environment]
   NODE_VERSION = "22"
   NEXT_TELEMETRY_DISABLED = "1"
+  # A relative base URL, not an absolute one. Next.js bakes NEXT_PUBLIC_* into the bundle, so
+  # an absolute backend URL would be frozen at build time and every backend move would need a
+  # rebuild. Pointing at /api/v1 and proxying below means the backend can move by editing one
+  # line here. It also makes the browser see one origin, which removes CORS and the
+  # mixed-content problem an http backend would otherwise cause on an https page.
+  NEXT_PUBLIC_API_URL = "/api/v1"
+
+# Proxy the API through this domain. status 200 with force makes it a rewrite rather than a
+# redirect, so the browser never learns the backend's address.
+# Replace BACKEND_ORIGIN with the deployed API, e.g. https://<user>-<space>.hf.space
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://BACKEND_ORIGIN/api/:splat"
+  status = 200
+  force  = true
 
 # The Next.js runtime turns the build into functions and static assets. Without it a Next app
 # deploys as bare files and every route but the homepage 404s.

@@ -92,3 +92,6 @@ docker-reset: ## Stop the stack and delete the database volume
 .PHONY: docker-logs
 docker-logs: ## Follow the backend and frontend logs
 	docker compose logs -f backend frontend
+
+hf-sync: ## Publish the backend to a Hugging Face Space (HF_SPACE_URL=... make hf-sync)
+	bash deploy/huggingface/sync.sh $(HF_SPACE_URL)
