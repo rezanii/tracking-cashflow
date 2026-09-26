@@ -57,7 +57,7 @@ tracking-cashflow/
 │   │   │   ├── dto/            request and response shapes
 │   │   │   ├── validator/      struct validation and field errors
 │   │   │   ├── repository/     data access, transaction manager
-│   │   │   ├── service/        business logic, Excel and PDF builders
+│   │   │   ├── service/        business logic, daily report, Telegram bot, Excel and PDF
 │   │   │   ├── handler/        HTTP adapters
 │   │   │   ├── middleware/     auth, logging, secure headers
 │   │   │   ├── router/         route table and dependency wiring
@@ -67,7 +67,7 @@ tracking-cashflow/
 │   │   ├── tests/              API integration tests
 │   │   └── Dockerfile
 │   └── frontend/
-│       ├── app/                login, dashboard, transactions, categories, reports
+│       ├── app/                login, dashboard, transactions, categories, reports, settings
 │       ├── components/         ui primitives, layout shell, charts, transaction form
 │       ├── hooks/              auth context, async loader
 │       ├── lib/                api client, auth storage, formatters
@@ -92,7 +92,14 @@ tracking-cashflow/
 erDiagram
     users ||--o{ categories : owns
     users ||--o{ transactions : owns
+    users ||--o{ accounts : owns
+    users ||--o| telegram_links : "has one"
+    users ||--o{ telegram_pairing_codes : requests
     categories ||--o{ transactions : classifies
+    accounts ||--o{ transactions : "holds (account_id)"
+    accounts ||--o{ transactions : "receives (to_account_id)"
+    accounts ||--o{ account_balance_snapshots : "is counted in"
+    transactions ||--o{ transactions : "details (parent_id)"
 
     users {
         bigint id PK
@@ -124,18 +131,73 @@ erDiagram
         decimal amount "DECIMAL(18,2)"
         nvarchar description
         nvarchar reference_number
+        bigint account_id FK "where the money moved"
+        bigint to_account_id FK "TRANSFER destination only"
+        bigint parent_id FK "makes this row a detail line"
         datetime2 created_at
         datetime2 updated_at
     }
+
+    accounts {
+        bigint id PK
+        bigint user_id FK
+        nvarchar name UK "unique per user"
+        varchar account_type "CASH_FLOW | WALLET | BANK | CREDIT_CARD | SAVINGS"
+        decimal opening_balance "DECIMAL(18,2)"
+        nvarchar description
+        bit is_active
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    account_balance_snapshots {
+        bigint id PK
+        bigint user_id FK
+        bigint account_id FK
+        date as_of_date "unique with account_id"
+        decimal actual_balance "observed, not derived"
+        nvarchar note
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    telegram_links {
+        bigint id PK
+        bigint user_id FK "unique"
+        bigint chat_id UK "unique"
+        nvarchar username
+        nvarchar chat_title
+        datetime2 linked_at
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    telegram_pairing_codes {
+        bigint id PK
+        bigint user_id FK
+        varchar code UK
+        datetime2 expires_at
+        datetime2 used_at "null until spent"
+        datetime2 created_at
+    }
 ```
 
+Six tables. `accounts` and `account_balance_snapshots` exist for the daily report (§13):
+an account is where money sits, and a snapshot is what it *actually* held on a day, which
+cannot be derived from the transactions. `transactions.parent_id` breaks one recorded amount
+into what it became.
+
 Indexes: `uq_users_email`, `ix_transactions_user_date`, `ix_transactions_user_type_date`,
-`ix_transactions_user_category`, `ix_transactions_reference`, `ix_categories_user_type`.
-Every one leads with `user_id`, so ownership-scoped queries seek rather than scan.
+`ix_transactions_user_category`, `ix_transactions_reference`, `ix_transactions_account`,
+`ix_transactions_to_account`, `ix_transactions_parent`, `ix_categories_user_type`,
+`uq_accounts_user_name`, `ix_accounts_user_type`,
+`uq_account_balance_snapshots_account_date`, `uq_telegram_links_chat`,
+`uq_telegram_links_user`, `uq_telegram_pairing_codes_code`. Every one that is queried per user
+leads with `user_id`, so ownership-scoped queries seek rather than scan.
 
 ## 4. API endpoints
 
-Base URL `\/api\/v1`. Swagger UI at `\/swagger\/index.html`.
+Base URL `/api/v1`. Swagger UI at `/swagger/index.html` — 26 paths, 41 definitions.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
@@ -161,6 +223,21 @@ Base URL `\/api\/v1`. Swagger UI at `\/swagger\/index.html`.
 | GET | `/reports/cash-flow/pdf` | yes | `.pdf` download |
 | GET | `/reports/expense-by-category` | yes | totals grouped by category |
 | GET | `/reports/monthly` | yes | one row per month |
+| GET | `/reports/daily-cash-flow` | yes | the full daily report as JSON (see §13) |
+| GET | `/accounts` | yes | list, with `account_type`, `is_active`, `search`, paging, sorting |
+| POST | `/accounts` | yes | create |
+| GET | `/accounts/{id}` | yes | detail |
+| PUT | `/accounts/{id}` | yes | update |
+| PATCH | `/accounts/{id}/status` | yes | activate or deactivate |
+| DELETE | `/accounts/{id}` | yes | delete, 409 while still referenced |
+| GET | `/accounts/{id}/balances` | yes | observed balance history |
+| POST | `/accounts/{id}/balances` | yes | record what the account actually held on a day |
+| DELETE | `/accounts/{id}/balances/{balance_id}` | yes | remove one observed balance |
+| POST | `/telegram/pairing-code` | yes | single-use code for connecting a chat |
+| GET | `/telegram/link` | yes | whether a chat is connected |
+| DELETE | `/telegram/link` | yes | disconnect the chat |
+| POST | `/telegram/send/daily-report` | yes | push the daily report to the linked chat |
+| POST | `/telegram/webhook` | secret | called by Telegram, authenticated by header |
 | GET | `/health` | no | liveness probe |
 
 Every JSON response uses one envelope:
@@ -265,10 +342,18 @@ when it is missing, which golang-migrate cannot do on its own. `drop` is refused
 Migrations live in `apps/backend/migrations` as plain SQL pairs:
 
 ```
-000001_create_users.up.sql      / .down.sql
-000002_create_categories.up.sql / .down.sql
-000003_create_transactions.up.sql / .down.sql
+000001_create_users.up.sql               / .down.sql
+000002_create_categories.up.sql          / .down.sql
+000003_create_transactions.up.sql        / .down.sql
+000004_create_accounts.up.sql            / .down.sql
+000005_add_transaction_accounts.up.sql   / .down.sql
+000006_create_telegram_links.up.sql      / .down.sql
 ```
+
+`000005` adds columns and then constrains them, which SQL Server cannot do in one batch
+because it compiles the batch as a whole. The statements after the `ALTER TABLE ADD` are
+wrapped in `EXEC(N'...')` to force a fresh compilation scope. Every `down` is reversible and
+the 4-to-6 round trip is exercised, not assumed.
 
 `make sync-db-docs` copies them into `database/migrations` for DBA review.
 
@@ -279,12 +364,18 @@ make test         # unit tests, and integration tests when a database is reachab
 make test-cover   # same, with a total coverage figure
 ```
 
+80 test functions in all.
+
 Unit tests cover the money arithmetic, paging, the sort allow list, JWT handling, and the
-auth, category, transaction and report services against in-memory fakes.
+auth, category, transaction, report and daily-report services against in-memory fakes. The
+daily report's worked example is asserted figure by figure, and one test walks the rendered
+Telegram message asserting no MarkdownV2 special character is left unescaped — Telegram
+rejects the whole message otherwise, so this is the check that keeps the bot working.
 
 Integration tests in `apps/backend/tests` drive the real router against SQL Server:
 register, login, token rejection, transaction CRUD, ownership, filtering, paging, category
-lifecycle, every report, and both exports. They **skip** themselves when no database is
+lifecycle, every report, both exports, account lifecycle and ownership, observed balances,
+transfer validation, the Telegram pairing endpoints, and the full daily report end to end. They **skip** themselves when no database is
 reachable so the suite stays green on a machine without the stack:
 
 ```bash
@@ -384,8 +475,9 @@ the same table, repeating the header on every page.
   stops trusting it at expiry. A stolen token stays valid until `JWT_EXPIRATION` passes.
   A deny list or short-lived tokens with refresh would fix this and both need storage.
 - **No refresh token.** When the token expires the user logs in again.
-- **`transfer` has no counter-account.** The type is recorded and excluded from the totals,
-  but the pair of accounts is not modelled, so a transfer cannot be reconciled between them.
+- **A transfer without accounts is still just a tag.** `TRANSFER` now carries `account_id` and
+  `to_account_id`, so it can be reconciled between two accounts — but both stay optional, and a
+  transfer recorded without them is excluded from the totals and appears in no account section.
 - **Reports load the whole period into memory.** A cash flow report over several years of
   dense data will be large; the endpoint has no paging.
 - **The frontend keeps the token in `localStorage`**, which is readable by any script running
@@ -402,12 +494,25 @@ the same table, repeating the header on every page.
 - **Registration does not log the user in.** `POST /auth/register` returns the created user,
   not a token, so the client calls `POST /auth/login` afterwards. The web app does this for
   you; a direct API consumer has to make both calls.
+- **One bot token cannot be shared.** Two processes polling the same token terminate each
+  other's long poll and Telegram answers `409 Conflict`. If another service already uses the
+  bot, create a second one in @BotFather for this app.
+- **Nothing sends the report on a schedule.** Delivery is pulled (`/report` in the chat) or
+  pushed on request (`POST /telegram/send/daily-report`). A nightly send needs a scheduler,
+  which is a cron entry or a job runner, not a code change.
+- **The daily report covers one day.** There is no weekly or monthly variant of it, and no
+  Excel or PDF export of it — the existing exports cover the cash-flow report instead.
+- **The opening balance is derived, not stored.** It is the cash flow accounts' opening
+  balances plus every cash flow movement before the date, so correcting old history moves it.
+  A stored month-opening figure would be steadier but has to be maintained.
+- **The bot speaks Indonesian only**, and the report's labels are fixed in the renderer rather
+  than being configurable per user.
 
 ## 12. Recommended next steps
 
 1. **Refresh tokens and a revocation list**, so logout and a stolen token both have teeth.
-2. **Account modelling for transfers**: a from and a to account turns the type into a real
-   double entry and makes reconciliation possible.
+2. **Require accounts on a transfer** once existing rows are backfilled, so the database
+   enforces what the report already assumes.
 3. **Budgets per category per month**, with the dashboard showing spend against budget.
 4. **Server-side paging for reports**, plus a streaming export so a multi-year Excel file
    does not have to fit in memory.
@@ -417,3 +522,145 @@ the same table, repeating the header on every page.
 7. **CI**: run `make lint` and `make test` on every push, with SQL Server as a service
    container so the integration tests run there too.
 8. **Attachment upload** for receipts, kept out of the database itself.
+9. **Scheduled delivery** of the daily report, with the send time set per user.
+10. **Recording spending from the chat**, so `/expense 25000 kopi` writes a transaction instead
+    of only reading them back.
+
+## 13. Daily cash flow report and Telegram
+
+A second reporting path, built for reading on a phone rather than in a spreadsheet. The same
+report serves `GET /reports/daily-cash-flow` as JSON and the Telegram bot as a message.
+
+### Accounts are what make it possible
+
+The generic report groups by category. This one groups by **account**, and `account_type` is a
+reporting role rather than a label for the instrument:
+
+| Type | Section it drives |
+| --- | --- |
+| `CASH_FLOW` | opening balance and the household expense lines |
+| `CREDIT_CARD` | the bill paid, netted against money taken back off the card |
+| `BANK` | money in, fees, money out, and what was already sitting there |
+| `WALLET` | an allowance: handed over, recorded, and what is actually left |
+| `SAVINGS` | a top-up destination that is set aside rather than spent |
+
+Two more pieces carry the rest:
+
+- **`account_balance_snapshots`** stores what an account *actually* held on a day, counted by
+  hand or read off a banking app. It cannot be derived from the transactions, and the gap
+  between the two is the report's most useful number: spending that was never written down.
+- **`transactions.parent_id`** breaks one recorded amount into what it became. A 100.000 cash
+  withdrawal is listed once, with the ice cream and the fuel underneath. Only parents count
+  towards a total.
+
+`TRANSFER` now carries `account_id` and `to_account_id`, so a transfer is a real movement
+between two accounts. That also closes the "transfer has no counter-account" limitation this
+README used to list.
+
+### Setting up the bot
+
+Use a bot that nothing else polls — see the note on sharing a token below.
+
+```bash
+# 1. Create a bot with @BotFather (/newbot) and copy its token into .env.
+#    Both .env and apps/backend/.env are read: the compose stack uses the first,
+#    a host-run backend (Option B) uses the second.
+TELEGRAM_MODE=polling
+TELEGRAM_BOT_TOKEN=<token from BotFather>
+
+# 2. Restart the API. It verifies the token and starts listening:
+#    INFO telegram bot ready username=... webhook=false
+#    INFO telegram poller started
+```
+
+Then connect a chat. Open **Pengaturan** in the web app, press **Buat Kode Pairing**, and send
+`/start <code>` to the bot — or do the same over the API:
+
+```bash
+curl -s -X POST "$API/telegram/pairing-code" -H "Authorization: Bearer $TOKEN"
+# {"data":{"code":"YNR4JBLH","instruction":"Kirim pesan \"/start YNR4JBLH\" ke bot Telegram"}}
+```
+
+A chat id proves nothing — anyone can find a bot and message it — so the bot answers an
+unlinked chat with nothing but "not linked". The code is single-use, short-lived, and comes
+from `crypto/rand`.
+
+Commands: `/report` (today), `/report 2026-09-25`, `/saldo`, `/status`, `/unlink`, `/help`.
+
+### Polling or webhook
+
+| | Needs a public URL | Use when |
+| --- | --- | --- |
+| `TELEGRAM_MODE=polling` | no | local development, or a server behind NAT |
+| `TELEGRAM_MODE=webhook` | yes, HTTPS | production, where Telegram can reach you |
+
+Webhook mode also needs `TELEGRAM_WEBHOOK_URL` and `TELEGRAM_WEBHOOK_SECRET`. The secret is
+echoed back by Telegram in `X-Telegram-Bot-Api-Secret-Token` and compared in constant time, so
+knowing the URL is not enough to post forged updates; with no secret set the endpoint returns
+404 rather than accepting anything. Startup reconciles the two modes, because Telegram refuses
+`getUpdates` while a webhook is registered.
+
+**One bot token, one consumer.** Two polling processes on the same token terminate each
+other's long poll and Telegram answers `409 Conflict: terminated by other getUpdates request`.
+Registering a webhook does not avoid it either: that makes the other process's `getUpdates`
+fail outright. If another service already uses a bot, create a second one for this app.
+
+`TELEGRAM_MODE=off` (the default) disables the integration entirely, and the webhook endpoint
+then answers 404 rather than sitting open on a stale secret.
+
+### What the report looks like
+
+```
+📊 CASH FLOW SEPTEMBER 2026
+📅 25/09
+━━━━━━━━━━━━━━
+💰 SALDO AWAL
+Saldo Awal Cash Flow
+Rp8.500.000
+━━━━━━━━━━━━━━
+💸 PENGELUARAN CASH FLOW
+• Cicilan Rumah : Rp1.150.000
+• Belanja Bulanan : Rp3.000.000
+➡️ Total Pengeluaran : Rp5.000.000
+━━━━━━━━━━━━━━
+💳 PAYMENT CC
+• Bayar tagihan : Rp1.750.000
+• Ambil kembali / Top-up : Rp900.000
+➡️ Net Payment CC
+Rp1.750.000 − Rp900.000
+= Rp850.000
+━━━━━━━━━━━━━━
+🏦 DOMPET HARIAN
+Jatah Dompet Harian : Rp600.000
+• Tarik Tunai : Rp100.000
+  ◦ Makan siang : Rp25.000
+  ◦ Bensin : Rp30.000
+➡️ Total transaksi tercatat
+Rp500.000
+━━━━━━━━━━━━━━
+💰 SISA DOMPET HARIAN
+➡️ Sisa menurut catatan  Rp100.000
+Namun saldo aktual yang ada: Rp72.500
+➡️ Rp27.500 = transaksi yang belum tercatat
+━━━━━━━━━━━━━━
+📊 REKONSILIASI TOP-UP
+= Rp900.000 ✅
+➡️ Selisih Top-up : Rp0
+```
+
+The bot receives this as MarkdownV2, where an unescaped `.` or `-` in an amount makes Telegram
+reject the whole message. Every value is escaped before the bold markers are added, and a test
+walks the rendered output asserting nothing is left bare. Long reports are split on section
+boundaries to stay under the 4096-character limit.
+
+Sections with nothing to say are omitted, so a quiet day is a short message. A wallet or bank
+reports a variance only once a balance has been recorded for it — without one it stops at the
+expected figure instead of inventing a difference.
+
+### Trying it with the seeded data
+
+`make seed` loads the worked example above on today's date, so `/report` with no argument
+returns the full report. Every figure in it — `850.000`, `500.000`, `100.000`, `27.500`,
+`12.500`, `7.500`, and a reconciliation difference of `0` — is computed, not stored. Only the
+opening balance differs from the sample above, because it is derived from whatever history the
+seed left behind.

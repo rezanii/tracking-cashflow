@@ -12,10 +12,47 @@ import (
 
 type ReportHandler struct {
 	reports service.ReportService
+	daily   service.DailyReportService
 }
 
-func NewReportHandler(reports service.ReportService) *ReportHandler {
-	return &ReportHandler{reports: reports}
+func NewReportHandler(reports service.ReportService, daily service.DailyReportService) *ReportHandler {
+	return &ReportHandler{reports: reports, daily: daily}
+}
+
+// DailyCashFlow returns the structured daily report: cash flow, card payments, top-up,
+// wallets, banks and the reconciliation that ties them together.
+//
+//	@Summary		Daily cash flow report
+//	@Description	The same report the Telegram bot sends, as JSON. Sections with nothing to say are
+//	@Description	omitted, and a wallet or bank only reports a variance once a balance has been
+//	@Description	recorded for it.
+//	@Tags			Reports
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			date	query		string	false	"Report date, YYYY-MM-DD. Defaults to today."
+//	@Success		200		{object}	utils.Envelope{data=dto.DailyCashFlowReport}
+//	@Failure		401		{object}	utils.Envelope
+//	@Failure		422		{object}	utils.Envelope
+//	@Router			/reports/daily-cash-flow [get]
+func (h *ReportHandler) DailyCashFlow(w http.ResponseWriter, r *http.Request) {
+	userID, err := middleware.UserID(r.Context())
+	if err != nil {
+		utils.WriteError(w, err)
+		return
+	}
+
+	date, err := reportDate(r)
+	if err != nil {
+		utils.WriteError(w, err)
+		return
+	}
+
+	report, err := h.daily.Build(r.Context(), userID, date)
+	if err != nil {
+		utils.WriteError(w, err)
+		return
+	}
+	utils.OK(w, "Data retrieved successfully", report)
 }
 
 // Dashboard returns the figures and chart series behind the dashboard.

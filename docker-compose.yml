@@ -63,6 +63,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # The bot is off unless a mode and a token are set, so the stack starts without them.
+      TELEGRAM_MODE: ${TELEGRAM_MODE:-off}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TELEGRAM_PAIRING_CODE_TTL: ${TELEGRAM_PAIRING_CODE_TTL:-15m}
     ports:
       # Published on APP_HOST_PORT so a port already in use on the host can be avoided.
       - "${APP_HOST_PORT:-8080}:8080"

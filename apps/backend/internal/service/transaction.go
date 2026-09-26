@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -12,6 +13,13 @@ import (
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/model"
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/repository"
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/utils"
+)
+
+// Field-level reasons, kept as errors so resolveAccounts can report them per field.
+var (
+	errAccountLookup   = errors.New("failed to load account")
+	errAccountNotFound = errors.New("account not found")
+	errAccountInactive = errors.New("account is inactive")
 )
 
 type TransactionService interface {
@@ -25,15 +33,22 @@ type TransactionService interface {
 type transactionService struct {
 	transactions repository.TransactionRepository
 	categories   repository.CategoryRepository
+	accounts     repository.AccountRepository
 	tx           repository.TxManager
 }
 
 func NewTransactionService(
 	transactions repository.TransactionRepository,
 	categories repository.CategoryRepository,
+	accounts repository.AccountRepository,
 	tx repository.TxManager,
 ) TransactionService {
-	return &transactionService{transactions: transactions, categories: categories, tx: tx}
+	return &transactionService{
+		transactions: transactions,
+		categories:   categories,
+		accounts:     accounts,
+		tx:           tx,
+	}
 }
 
 // resolved holds the cross-checked form of a create or update request.
@@ -42,6 +57,9 @@ type resolved struct {
 	transactionType model.TransactionType
 	categoryID      *int64
 	amount          decimal.Decimal
+	accountID       *int64
+	toAccountID     *int64
+	parentID        *int64
 }
 
 func (s *transactionService) Create(ctx context.Context, userID int64, request dto.TransactionCreateRequest) (dto.TransactionResponse, error) {
@@ -59,6 +77,9 @@ func (s *transactionService) Create(ctx context.Context, userID int64, request d
 		Amount:          input.amount,
 		Description:     strings.TrimSpace(request.Description),
 		ReferenceNumber: strings.TrimSpace(request.ReferenceNumber),
+		AccountID:       input.accountID,
+		ToAccountID:     input.toAccountID,
+		ParentID:        input.parentID,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -113,6 +134,9 @@ func (s *transactionService) Update(ctx context.Context, userID, id int64, reque
 		existing.Amount = input.amount
 		existing.Description = strings.TrimSpace(request.Description)
 		existing.ReferenceNumber = strings.TrimSpace(request.ReferenceNumber)
+		existing.AccountID = input.accountID
+		existing.ToAccountID = input.toAccountID
+		existing.ParentID = input.parentID
 		existing.UpdatedAt = time.Now().UTC()
 
 		if err := transactions.Update(ctx, existing); err != nil {
@@ -224,12 +248,88 @@ func (s *transactionService) resolve(ctx context.Context, userID int64, request 
 		}
 	}
 
+	accountID, toAccountID, parentID, err := s.resolveAccounts(ctx, userID, transactionType, request)
+	if err != nil {
+		return resolved{}, err
+	}
+
 	return resolved{
 		date:            date,
 		transactionType: transactionType,
 		categoryID:      categoryID,
 		amount:          amount,
+		accountID:       accountID,
+		toAccountID:     toAccountID,
+		parentID:        parentID,
 	}, nil
+}
+
+// resolveAccounts checks both ends of a transfer and the parent link. Every lookup is scoped
+// by user id, so another user's account or transaction reads as "not found" rather than
+// becoming reachable through a report.
+func (s *transactionService) resolveAccounts(
+	ctx context.Context,
+	userID int64,
+	transactionType model.TransactionType,
+	request dto.TransactionCreateRequest,
+) (accountID, toAccountID, parentID *int64, err error) {
+	fields := map[string]string{}
+
+	accountID = request.AccountID
+	toAccountID = request.ToAccountID
+	parentID = request.ParentID
+
+	if accountID != nil {
+		if err := s.requireAccount(ctx, userID, *accountID); err != nil {
+			fields["account_id"] = err.Error()
+		}
+	}
+
+	switch {
+	case toAccountID == nil:
+	case transactionType != model.TransactionTypeTransfer:
+		fields["to_account_id"] = "to_account_id is only allowed on a TRANSFER"
+	case accountID == nil:
+		fields["account_id"] = "account_id is required when to_account_id is set"
+	case *toAccountID == *accountID:
+		fields["to_account_id"] = "to_account_id must differ from account_id"
+	default:
+		if err := s.requireAccount(ctx, userID, *toAccountID); err != nil {
+			fields["to_account_id"] = err.Error()
+		}
+	}
+
+	if parentID != nil {
+		parent, loadErr := s.transactions.FindByID(ctx, userID, *parentID)
+		switch {
+		case loadErr != nil:
+			return nil, nil, nil, utils.WrapDomainError(utils.ErrNotFound, "Failed to load parent transaction", loadErr)
+		case parent == nil:
+			fields["parent_id"] = "parent transaction not found"
+		case parent.ParentID != nil:
+			// One level only. Nesting deeper would make the recorded total ambiguous.
+			fields["parent_id"] = "parent transaction is itself a detail line"
+		}
+	}
+
+	if len(fields) > 0 {
+		return nil, nil, nil, utils.NewFieldError("Validation failed", fields)
+	}
+	return accountID, toAccountID, parentID, nil
+}
+
+func (s *transactionService) requireAccount(ctx context.Context, userID, accountID int64) error {
+	account, err := s.accounts.FindByID(ctx, userID, accountID)
+	if err != nil {
+		return errAccountLookup
+	}
+	if account == nil {
+		return errAccountNotFound
+	}
+	if !account.IsActive {
+		return errAccountInactive
+	}
+	return nil
 }
 
 func toTransactionResponse(transaction model.Transaction) dto.TransactionResponse {
@@ -242,7 +342,19 @@ func toTransactionResponse(transaction model.Transaction) dto.TransactionRespons
 		Amount:          utils.Round(transaction.Amount),
 		Description:     transaction.Description,
 		ReferenceNumber: transaction.ReferenceNumber,
+		AccountID:       transaction.AccountID,
+		AccountName:     transaction.AccountName(),
+		ToAccountID:     transaction.ToAccountID,
+		ToAccountName:   toAccountName(transaction),
+		ParentID:        transaction.ParentID,
 		CreatedAt:       transaction.CreatedAt,
 		UpdatedAt:       transaction.UpdatedAt,
 	}
+}
+
+func toAccountName(transaction model.Transaction) string {
+	if transaction.ToAccount == nil {
+		return ""
+	}
+	return transaction.ToAccount.Name
 }

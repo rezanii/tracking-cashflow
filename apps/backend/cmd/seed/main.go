@@ -79,7 +79,24 @@ func run() error {
 			return err
 		}
 
-		return ensureTransactions(tx, user.ID, categories)
+		if err := ensureTransactions(tx, user.ID, categories); err != nil {
+			return err
+		}
+
+		accounts, err := ensureAccounts(tx, user.ID)
+		if err != nil {
+			return err
+		}
+
+		// The demo day sits on today's date so a bare /report in Telegram returns the full
+		// report without an argument.
+		now := time.Now().UTC()
+		demoDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+		if err := ensureDemoTransactions(tx, user.ID, categories, accounts, demoDate); err != nil {
+			return err
+		}
+		return ensureBalanceSnapshots(tx, user.ID, accounts, demoDate)
 	})
 	if err != nil {
 		return err
@@ -135,6 +152,7 @@ func ensureCategories(tx *gorm.DB, userID int64) (map[string]int64, error) {
 		{Name: "Entertainment", Type: model.CategoryTypeExpense, Description: "Leisure"},
 		{Name: "Other", Type: model.CategoryTypeExpense, Description: "Uncategorised spending"},
 	}
+	definitions = append(definitions, demoCategories()...)
 
 	ids := make(map[string]int64, len(definitions))
 	now := time.Now().UTC()

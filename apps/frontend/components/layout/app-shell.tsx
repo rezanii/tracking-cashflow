@@ -13,6 +13,7 @@ const navigation = [
   { href: "/transactions", label: "Transaksi", icon: "⇅" },
   { href: "/categories", label: "Kategori", icon: "☰" },
   { href: "/reports", label: "Laporan", icon: "▤" },
+  { href: "/settings", label: "Pengaturan", icon: "⚙" },
 ];
 
 // AppShell guards every page behind it: without a session it redirects to the login page

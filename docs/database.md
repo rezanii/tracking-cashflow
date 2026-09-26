@@ -8,7 +8,14 @@ SQL Server 2022. All identifiers are `snake_case`.
 erDiagram
     users ||--o{ categories : owns
     users ||--o{ transactions : owns
+    users ||--o{ accounts : owns
+    users ||--o| telegram_links : "has one"
+    users ||--o{ telegram_pairing_codes : requests
     categories ||--o{ transactions : classifies
+    accounts ||--o{ transactions : "holds (account_id)"
+    accounts ||--o{ transactions : "receives (to_account_id)"
+    accounts ||--o{ account_balance_snapshots : "is counted in"
+    transactions ||--o{ transactions : "details (parent_id)"
 
     users {
         bigint id PK
@@ -40,10 +47,92 @@ erDiagram
         decimal amount "DECIMAL(18,2)"
         nvarchar description
         nvarchar reference_number
+        bigint account_id FK "where the money moved"
+        bigint to_account_id FK "TRANSFER destination only"
+        bigint parent_id FK "makes this row a detail line"
         datetime2 created_at
         datetime2 updated_at
     }
+
+    accounts {
+        bigint id PK
+        bigint user_id FK
+        nvarchar name UK "unique per user"
+        varchar account_type "CASH_FLOW | WALLET | BANK | CREDIT_CARD | SAVINGS"
+        decimal opening_balance "DECIMAL(18,2)"
+        nvarchar description
+        bit is_active
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    account_balance_snapshots {
+        bigint id PK
+        bigint user_id FK
+        bigint account_id FK
+        date as_of_date "unique with account_id"
+        decimal actual_balance "observed, not derived"
+        nvarchar note
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    telegram_links {
+        bigint id PK
+        bigint user_id FK "unique"
+        bigint chat_id UK "unique"
+        nvarchar username
+        nvarchar chat_title
+        datetime2 linked_at
+        datetime2 created_at
+        datetime2 updated_at
+    }
+
+    telegram_pairing_codes {
+        bigint id PK
+        bigint user_id FK
+        varchar code UK
+        datetime2 expires_at
+        datetime2 used_at "null until spent"
+        datetime2 created_at
+    }
 ```
+
+## Account types
+
+`account_type` is a reporting role, not a label for the instrument: it decides which section
+of the daily report an account appears in.
+
+| Type | Section it drives |
+| --- | --- |
+| `CASH_FLOW` | the opening balance and the "pengeluaran cash flow" lines |
+| `CREDIT_CARD` | payment section: the bill paid, netted against money taken back off the card |
+| `BANK` | mutation section: money in, fees, money out, and what was already there |
+| `WALLET` | an allowance: what was handed over, what was recorded, what is actually left |
+| `SAVINGS` | a top-up destination that is set aside rather than spent |
+
+A transaction with no `account_id` is treated as cash flow, so rows recorded before accounts
+existed keep counting.
+
+## Why observed balances are stored
+
+`account_balance_snapshots` holds a balance read off a banking app or counted by hand. It
+cannot be derived from the transactions, and the difference between the two is the point:
+what the records say should be left, minus what is actually there, is spending that was never
+written down. Without this table the report can show an expected remainder but never a
+variance.
+
+One row per account per day. Re-counting the same day corrects the figure rather than adding
+a second, contradictory row. GORM's `clause.OnConflict` is ignored by the SQL Server driver,
+so the repository does an explicit update-then-insert instead.
+
+## Detail lines
+
+`transactions.parent_id` lets one recorded amount be broken into what it was actually spent
+on: a 100.000 cash withdrawal listed once, with the ice cream and the fuel underneath. Only
+parents count towards a total; the children explain the parent and would double it. Nesting
+is one level deep, enforced in the service, because deeper nesting makes the recorded total
+ambiguous.
 
 ## Tables
 

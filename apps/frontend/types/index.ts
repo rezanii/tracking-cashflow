@@ -120,3 +120,47 @@ export type ReportFilters = {
 };
 
 export type DashboardRange = "today" | "week" | "month" | "year" | "custom";
+
+export type TelegramLink = {
+  linked: boolean;
+  chat_id?: number;
+  username?: string;
+  chat_title?: string;
+  linked_at?: string;
+};
+
+export type TelegramPairingCode = {
+  code: string;
+  expires_at: string;
+  instruction: string;
+};
+
+export type TelegramSendResult = {
+  chat_id: number;
+  messages: number;
+  characters: number;
+};
+
+export type AccountType = "CASH_FLOW" | "WALLET" | "BANK" | "CREDIT_CARD" | "SAVINGS";
+
+export type Account = {
+  id: number;
+  name: string;
+  account_type: AccountType;
+  opening_balance: string;
+  description: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BalanceSnapshot = {
+  id: number;
+  account_id: number;
+  account_name: string;
+  as_of_date: string;
+  actual_balance: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+};

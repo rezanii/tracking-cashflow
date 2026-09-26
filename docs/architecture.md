@@ -128,3 +128,45 @@ Frontend:
 - **decimal over int64 cents**: the report layer sums and subtracts across categories; a
   decimal type keeps the arithmetic readable and the scale explicit.
 - **slog over a logging library**: structured output with no dependency.
+
+## Telegram integration
+
+The bot is an add-on, not a dependency: with `TELEGRAM_MODE=off` the API serves exactly as
+before, and a failure to reach Telegram at startup is logged while the HTTP surface keeps
+running.
+
+Two transports, one handler:
+
+- **polling** (`TELEGRAM_MODE=polling`) runs `getUpdates` in a goroutine started by `cmd/api`.
+  It needs no public URL, so it works on a laptop or behind NAT. The offset only advances
+  after an update has been handled, so a crash re-delivers rather than loses it.
+- **webhook** (`TELEGRAM_MODE=webhook`) takes updates on `POST /api/v1/telegram/webhook`.
+
+They are mutually exclusive — Telegram refuses `getUpdates` while a webhook is registered — so
+startup reconciles the two: polling mode deletes any webhook, webhook mode registers one.
+Both paths hand the update to the same `HandleUpdate`, which is why the command behaviour is
+tested once, without a network.
+
+One consequence worth knowing: **a bot token cannot be shared with another polling process.**
+Two pollers on one token terminate each other's long poll and Telegram answers
+`409 Conflict`. One bot, one consumer.
+
+### Why chats are paired rather than allow-listed
+
+A chat id proves nothing: anyone can find a bot and message it. So the API issues a
+short-lived single-use code to an authenticated caller, and the bot links the chat that sends
+it back. The code is spent by an `UPDATE ... WHERE used_at IS NULL`, which makes the claim and
+the check one atomic step, so two concurrent `/start` commands cannot both succeed. Codes come
+from `crypto/rand`, because a guessable one would hand over an account's finances.
+
+Until a chat is linked the bot answers nothing but "not linked", and a wrong code and an
+expired code get the same reply, so the bot cannot be used to probe which codes exist.
+
+### Rendering
+
+The report is built as data (`dto.DailyCashFlowReport`) and rendered separately, so the same
+report serves the JSON endpoint, the bot and any future channel. The renderer targets
+MarkdownV2, where an unescaped `.` or `-` inside an amount makes Telegram reject the whole
+message: every value is escaped before the bold markers are added, and a test walks the
+rendered output asserting no special character is left bare. Messages are split on section
+boundaries to stay under the 4096-character limit.

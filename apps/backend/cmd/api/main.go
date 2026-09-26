@@ -29,6 +29,7 @@ import (
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/config"
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/repository"
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/router"
+	"github.com/rezanii/tracking-cashflow/apps/backend/internal/service"
 )
 
 func main() {
@@ -85,6 +86,11 @@ func run() error {
 	}
 	defer closeDatabase(db)
 
+	// The bot is optional: with TELEGRAM_MODE=off the API serves exactly as before.
+	botCtx, stopBot := context.WithCancel(context.Background())
+	defer stopBot()
+	startTelegram(botCtx, cfg, db)
+
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.AppPort),
 		Handler:           router.New(cfg, db),
@@ -111,6 +117,9 @@ func run() error {
 		return fmt.Errorf("listen: %w", err)
 	case signalReceived := <-shutdown:
 		slog.Info("shutdown requested", "signal", signalReceived.String())
+		// The poller holds a long request open; cancelling it first lets it return instead
+		// of being killed mid-update.
+		stopBot()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -123,6 +132,38 @@ func run() error {
 		slog.Info("server stopped cleanly")
 		return nil
 	}
+}
+
+// startTelegram verifies the bot token, reconciles the webhook with the configured mode and,
+// in polling mode, starts the update loop. A failure here is logged and the API still serves:
+// the bot is an add-on, not a dependency of the HTTP surface.
+func startTelegram(ctx context.Context, cfg config.Config, db *gorm.DB) {
+	if !cfg.Telegram.Enabled() {
+		slog.Info("telegram integration disabled", "mode", cfg.Telegram.Mode)
+		return
+	}
+
+	telegram := router.NewTelegramService(
+		cfg,
+		repository.NewTelegramRepository(db),
+		service.NewDailyReportService(repository.NewDailyReportRepository(db), repository.NewAccountRepository(db)),
+		repository.NewAccountRepository(db),
+	)
+
+	configureCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := telegram.Configure(configureCtx); err != nil {
+		slog.Error("telegram setup failed; the bot will not respond", "error", err)
+		return
+	}
+
+	if cfg.Telegram.Mode != config.TelegramModePolling {
+		slog.Info("telegram webhook registered", "url", cfg.Telegram.WebhookURL)
+		return
+	}
+
+	client := service.NewTelegramClient(cfg.Telegram.BotToken, cfg.Telegram.APIBaseURL)
+	go service.NewTelegramPoller(client, telegram).Run(ctx)
 }
 
 func setupLogger(cfg config.Config) {

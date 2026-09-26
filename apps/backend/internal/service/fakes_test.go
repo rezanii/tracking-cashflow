@@ -415,3 +415,398 @@ func dateOf(value string) time.Time {
 	}
 	return parsed
 }
+
+// fakeAccountRepository is an in-memory stand-in with the same ownership rules as the real
+// repository: a lookup with the wrong user id finds nothing.
+type fakeAccountRepository struct {
+	accounts  map[int64]*model.Account
+	snapshots map[int64]model.AccountBalanceSnapshot
+	expenses  map[int64][]model.Transaction
+	nextID    int64
+	failOn    string
+}
+
+func newFakeAccountRepository() *fakeAccountRepository {
+	return &fakeAccountRepository{
+		accounts:  map[int64]*model.Account{},
+		snapshots: map[int64]model.AccountBalanceSnapshot{},
+		expenses:  map[int64][]model.Transaction{},
+		nextID:    1,
+	}
+}
+
+func (r *fakeAccountRepository) seed(userID int64, name string, accountType model.AccountType, active bool) *model.Account {
+	account := &model.Account{
+		ID:          r.nextID,
+		UserID:      userID,
+		Name:        name,
+		AccountType: accountType,
+		IsActive:    active,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	r.accounts[account.ID] = account
+	r.nextID++
+	return account
+}
+
+func (r *fakeAccountRepository) seedSnapshot(account *model.Account, asOf time.Time, balance string) {
+	r.snapshots[account.ID] = model.AccountBalanceSnapshot{
+		UserID:        account.UserID,
+		AccountID:     account.ID,
+		AsOfDate:      asOf,
+		ActualBalance: decimalOf(balance),
+	}
+}
+
+func (r *fakeAccountRepository) WithTx(*gorm.DB) repository.AccountRepository { return r }
+
+func (r *fakeAccountRepository) Create(_ context.Context, account *model.Account) error {
+	if r.failOn == "Create" {
+		return errBoom
+	}
+	account.ID = r.nextID
+	r.nextID++
+	copied := *account
+	r.accounts[account.ID] = &copied
+	return nil
+}
+
+func (r *fakeAccountRepository) Update(_ context.Context, account *model.Account) error {
+	existing, ok := r.accounts[account.ID]
+	if !ok || existing.UserID != account.UserID {
+		return utils.NotFound("Account")
+	}
+	copied := *account
+	r.accounts[account.ID] = &copied
+	return nil
+}
+
+func (r *fakeAccountRepository) Delete(_ context.Context, userID, id int64) error {
+	existing, ok := r.accounts[id]
+	if !ok || existing.UserID != userID {
+		return utils.NotFound("Account")
+	}
+	delete(r.accounts, id)
+	return nil
+}
+
+func (r *fakeAccountRepository) FindByID(_ context.Context, userID, id int64) (*model.Account, error) {
+	if r.failOn == "FindByID" {
+		return nil, errBoom
+	}
+	account, ok := r.accounts[id]
+	if !ok || account.UserID != userID {
+		return nil, nil
+	}
+	copied := *account
+	return &copied, nil
+}
+
+func (r *fakeAccountRepository) FindByName(_ context.Context, userID int64, name string) (*model.Account, error) {
+	for _, account := range r.accounts {
+		if account.UserID == userID && account.Name == name {
+			copied := *account
+			return &copied, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *fakeAccountRepository) List(_ context.Context, userID int64, query dto.AccountListQuery) ([]model.Account, int64, error) {
+	var matches []model.Account
+	for _, account := range r.accounts {
+		if account.UserID != userID {
+			continue
+		}
+		if query.AccountType != "" && string(account.AccountType) != query.AccountType {
+			continue
+		}
+		if query.IsActive != nil && account.IsActive != *query.IsActive {
+			continue
+		}
+		matches = append(matches, *account)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].Name < matches[j].Name })
+	return matches, int64(len(matches)), nil
+}
+
+func (r *fakeAccountRepository) ListByType(_ context.Context, userID int64, types ...model.AccountType) ([]model.Account, error) {
+	allowed := map[model.AccountType]bool{}
+	for _, accountType := range types {
+		allowed[accountType] = true
+	}
+
+	var matches []model.Account
+	for _, account := range r.accounts {
+		if account.UserID != userID || !account.IsActive || !allowed[account.AccountType] {
+			continue
+		}
+		matches = append(matches, *account)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].ID < matches[j].ID })
+	return matches, nil
+}
+
+func (r *fakeAccountRepository) CountTransactions(_ context.Context, _, id int64) (int64, error) {
+	return int64(len(r.expenses[id])), nil
+}
+
+func (r *fakeAccountRepository) SetActive(_ context.Context, userID, id int64, isActive bool) error {
+	account, ok := r.accounts[id]
+	if !ok || account.UserID != userID {
+		return utils.NotFound("Account")
+	}
+	account.IsActive = isActive
+	return nil
+}
+
+func (r *fakeAccountRepository) SumOpeningBalance(_ context.Context, userID int64, types ...model.AccountType) (decimal.Decimal, error) {
+	allowed := map[model.AccountType]bool{}
+	for _, accountType := range types {
+		allowed[accountType] = true
+	}
+
+	total := decimal.Zero
+	for _, account := range r.accounts {
+		if account.UserID != userID || !account.IsActive {
+			continue
+		}
+		if len(types) > 0 && !allowed[account.AccountType] {
+			continue
+		}
+		total = total.Add(account.OpeningBalance)
+	}
+	return total, nil
+}
+
+func (r *fakeAccountRepository) UpsertSnapshot(_ context.Context, snapshot *model.AccountBalanceSnapshot) error {
+	snapshot.ID = r.nextID
+	r.nextID++
+	r.snapshots[snapshot.AccountID] = *snapshot
+	return nil
+}
+
+func (r *fakeAccountRepository) ListSnapshots(_ context.Context, userID, accountID int64, _ int) ([]model.AccountBalanceSnapshot, error) {
+	snapshot, ok := r.snapshots[accountID]
+	if !ok || snapshot.UserID != userID {
+		return nil, nil
+	}
+	return []model.AccountBalanceSnapshot{snapshot}, nil
+}
+
+func (r *fakeAccountRepository) LatestSnapshots(_ context.Context, userID int64, asOf time.Time) (map[int64]model.AccountBalanceSnapshot, error) {
+	if r.failOn == "LatestSnapshots" {
+		return nil, errBoom
+	}
+	out := map[int64]model.AccountBalanceSnapshot{}
+	for accountID, snapshot := range r.snapshots {
+		if snapshot.UserID != userID || snapshot.AsOfDate.After(asOf) {
+			continue
+		}
+		out[accountID] = snapshot
+	}
+	return out, nil
+}
+
+func (r *fakeAccountRepository) DeleteSnapshot(_ context.Context, userID, accountID, _ int64) error {
+	snapshot, ok := r.snapshots[accountID]
+	if !ok || snapshot.UserID != userID {
+		return utils.NotFound("Balance snapshot")
+	}
+	delete(r.snapshots, accountID)
+	return nil
+}
+
+// fakeDailyReportRepository returns pre-built aggregates so the report maths can be tested
+// without a database. The real repository's job is the SQL; this fake's job is the shape.
+type fakeDailyReportRepository struct {
+	openingBalance decimal.Decimal
+	cashFlow       []repository.LabelledAmount
+	flows          map[int64]repository.AccountFlow
+	transfers      []repository.TransferEdge
+	expenses       map[int64][]model.Transaction
+	failOn         string
+}
+
+func newFakeDailyReportRepository() *fakeDailyReportRepository {
+	return &fakeDailyReportRepository{
+		openingBalance: decimal.Zero,
+		flows:          map[int64]repository.AccountFlow{},
+		expenses:       map[int64][]model.Transaction{},
+	}
+}
+
+func (r *fakeDailyReportRepository) OpeningBalance(context.Context, int64, time.Time) (decimal.Decimal, error) {
+	if r.failOn == "OpeningBalance" {
+		return decimal.Zero, errBoom
+	}
+	return r.openingBalance, nil
+}
+
+func (r *fakeDailyReportRepository) CashFlowExpenses(context.Context, int64, time.Time) ([]repository.LabelledAmount, error) {
+	if r.failOn == "CashFlowExpenses" {
+		return nil, errBoom
+	}
+	return r.cashFlow, nil
+}
+
+func (r *fakeDailyReportRepository) AccountFlows(context.Context, int64, time.Time) (map[int64]repository.AccountFlow, error) {
+	if r.failOn == "AccountFlows" {
+		return nil, errBoom
+	}
+	return r.flows, nil
+}
+
+func (r *fakeDailyReportRepository) Transfers(context.Context, int64, time.Time) ([]repository.TransferEdge, error) {
+	if r.failOn == "Transfers" {
+		return nil, errBoom
+	}
+	return r.transfers, nil
+}
+
+func (r *fakeDailyReportRepository) AccountExpenses(_ context.Context, _, accountID int64, _ time.Time) ([]model.Transaction, error) {
+	if r.failOn == "AccountExpenses" {
+		return nil, errBoom
+	}
+	return r.expenses[accountID], nil
+}
+
+// fakeTelegramClient records what would have been sent instead of reaching the network.
+type fakeTelegramClient struct {
+	sent      []string
+	chatIDs   []int64
+	markdown  []bool
+	updates   []dto.TelegramUpdate
+	webhookOn bool
+	failSend  bool
+}
+
+func (c *fakeTelegramClient) SendMessage(_ context.Context, chatID int64, text string, markdown bool) error {
+	if c.failSend {
+		return errBoom
+	}
+	c.chatIDs = append(c.chatIDs, chatID)
+	c.sent = append(c.sent, text)
+	c.markdown = append(c.markdown, markdown)
+	return nil
+}
+
+func (c *fakeTelegramClient) GetUpdates(context.Context, int64) ([]dto.TelegramUpdate, error) {
+	updates := c.updates
+	c.updates = nil
+	return updates, nil
+}
+
+func (c *fakeTelegramClient) SetWebhook(_ context.Context, _, _ string) error {
+	c.webhookOn = true
+	return nil
+}
+
+func (c *fakeTelegramClient) DeleteWebhook(context.Context) error {
+	c.webhookOn = false
+	return nil
+}
+
+func (c *fakeTelegramClient) GetMe(context.Context) (string, error) { return "rezanibot", nil }
+
+// fakeTelegramRepository is an in-memory link and pairing-code store.
+type fakeTelegramRepository struct {
+	codes  map[string]*model.TelegramPairingCode
+	links  map[int64]*model.TelegramLink
+	nextID int64
+}
+
+func newFakeTelegramRepository() *fakeTelegramRepository {
+	return &fakeTelegramRepository{
+		codes:  map[string]*model.TelegramPairingCode{},
+		links:  map[int64]*model.TelegramLink{},
+		nextID: 1,
+	}
+}
+
+func (r *fakeTelegramRepository) WithTx(*gorm.DB) repository.TelegramRepository { return r }
+
+func (r *fakeTelegramRepository) CreatePairingCode(_ context.Context, code *model.TelegramPairingCode) error {
+	if _, exists := r.codes[code.Code]; exists {
+		return errBoom
+	}
+	code.ID = r.nextID
+	r.nextID++
+	copied := *code
+	r.codes[code.Code] = &copied
+	return nil
+}
+
+func (r *fakeTelegramRepository) FindPairingCode(_ context.Context, code string) (*model.TelegramPairingCode, error) {
+	pairing, ok := r.codes[code]
+	if !ok {
+		return nil, nil
+	}
+	copied := *pairing
+	return &copied, nil
+}
+
+func (r *fakeTelegramRepository) ConsumePairingCode(_ context.Context, id int64, usedAt time.Time) (bool, error) {
+	for _, pairing := range r.codes {
+		if pairing.ID != id {
+			continue
+		}
+		if !pairing.Usable(usedAt) {
+			return false, nil
+		}
+		pairing.UsedAt = &usedAt
+		return true, nil
+	}
+	return false, nil
+}
+
+func (r *fakeTelegramRepository) UpsertLink(_ context.Context, link *model.TelegramLink) error {
+	for chatID, existing := range r.links {
+		if existing.UserID == link.UserID || chatID == link.ChatID {
+			delete(r.links, chatID)
+		}
+	}
+	link.ID = r.nextID
+	r.nextID++
+	copied := *link
+	r.links[link.ChatID] = &copied
+	return nil
+}
+
+func (r *fakeTelegramRepository) FindLinkByUser(_ context.Context, userID int64) (*model.TelegramLink, error) {
+	for _, link := range r.links {
+		if link.UserID == userID {
+			copied := *link
+			return &copied, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *fakeTelegramRepository) FindLinkByChat(_ context.Context, chatID int64) (*model.TelegramLink, error) {
+	link, ok := r.links[chatID]
+	if !ok {
+		return nil, nil
+	}
+	copied := *link
+	return &copied, nil
+}
+
+func (r *fakeTelegramRepository) DeleteLinkByUser(_ context.Context, userID int64) error {
+	for chatID, link := range r.links {
+		if link.UserID == userID {
+			delete(r.links, chatID)
+			return nil
+		}
+	}
+	return utils.NotFound("Telegram link")
+}
+
+func (r *fakeTelegramRepository) DeleteLinkByChat(_ context.Context, chatID int64) error {
+	if _, ok := r.links[chatID]; !ok {
+		return utils.NotFound("Telegram link")
+	}
+	delete(r.links, chatID)
+	return nil
+}

@@ -1,5 +1,150 @@
 basePath: /api/v1
 definitions:
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest:
+    properties:
+      account_type:
+        enum:
+        - CASH_FLOW
+        - WALLET
+        - BANK
+        - CREDIT_CARD
+        - SAVINGS
+        example: WALLET
+        type: string
+      description:
+        example: Allowance wallet
+        maxLength: 255
+        type: string
+      name:
+        example: Dompet Harian
+        maxLength: 100
+        minLength: 2
+        type: string
+      opening_balance:
+        example: "0.00"
+        type: string
+    required:
+    - account_type
+    - name
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse:
+    properties:
+      account_type:
+        example: WALLET
+        type: string
+      created_at:
+        type: string
+      description:
+        example: Allowance wallet
+        type: string
+      id:
+        example: 1
+        type: integer
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Dompet Harian
+        type: string
+      opening_balance:
+        example: "0.00"
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountStatusRequest:
+    properties:
+      is_active:
+        example: false
+        type: boolean
+    required:
+    - is_active
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine:
+    properties:
+      amount:
+        example: "1150000.00"
+        type: string
+      label:
+        example: Cicilan Rumah
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotRequest:
+    properties:
+      actual_balance:
+        example: "72500.00"
+        type: string
+      as_of_date:
+        example: "2026-09-25"
+        type: string
+      note:
+        example: Counted by hand
+        maxLength: 255
+        type: string
+    required:
+    - actual_balance
+    - as_of_date
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse:
+    properties:
+      account_id:
+        example: 1
+        type: integer
+      account_name:
+        example: Dompet Harian
+        type: string
+      actual_balance:
+        example: "72500.00"
+        type: string
+      as_of_date:
+        example: "2026-09-25"
+        type: string
+      created_at:
+        type: string
+      id:
+        example: 1
+        type: integer
+      note:
+        example: Counted by hand
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BankSection:
+    properties:
+      account_id:
+        example: 4
+        type: integer
+      actual_balance:
+        example: "20000.00"
+        type: string
+      computed:
+        description: 'Computed is MoneyIn - Fees - MoneyOut: the day''s own movement.'
+        example: "12500.00"
+        type: string
+      fees:
+        description: Fees are direct charges on the account, such as a transfer fee.
+        example: "2500.00"
+        type: string
+      has_actual_balance:
+        example: true
+        type: boolean
+      money_in:
+        example: "915000.00"
+        type: string
+      money_out:
+        example: "900000.00"
+        type: string
+      name:
+        example: Bank Utama
+        type: string
+      previous_balance:
+        description: |-
+          PreviousBalance is ActualBalance - Computed: what was already sitting there, which is
+          why the actual balance is not treated as a deduction from the wallet.
+        example: "7500.00"
+        type: string
+    type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CashFlowPoint:
     properties:
       balance:
@@ -132,6 +277,75 @@ definitions:
     - name
     - type
     type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CreditCardSection:
+    properties:
+      account_id:
+        example: 5
+        type: integer
+      name:
+        example: Bayar tagihan
+        type: string
+      net:
+        example: "850000.00"
+        type: string
+      payments:
+        example: "1750000.00"
+        type: string
+      taken_back:
+        description: TakenBack is money moved off the card into another account, the
+          top-up source.
+        example: "900000.00"
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.DailyCashFlowReport:
+    properties:
+      banks:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BankSection'
+        type: array
+      cash_flow_expenses:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine'
+        type: array
+      cash_flow_total:
+        example: "5000000.00"
+        type: string
+      credit_cards:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CreditCardSection'
+        type: array
+      date:
+        description: Date is the day the report covers.
+        example: "2026-09-25"
+        type: string
+      date_label:
+        description: DateLabel is the short day heading, e.g. "25/09".
+        example: 25/09
+        type: string
+      opening_balance:
+        example: "8500000.00"
+        type: string
+      opening_balance_label:
+        example: Saldo Awal Cash Flow
+        type: string
+      period_label:
+        description: PeriodLabel is the month heading, already localised, e.g. "SEPTEMBER
+          2026".
+        example: SEPTEMBER 2026
+        type: string
+      reconciliation:
+        $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.ReconciliationSection'
+      status:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.StatusLine'
+        type: array
+      top_up:
+        $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TopUpSection'
+      wallets:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletSection'
+        type: array
+    type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.DashboardSummaryResponse:
     properties:
       balance:
@@ -261,6 +475,25 @@ definitions:
         example: "2026-09-30"
         type: string
     type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.ReconciliationSection:
+    properties:
+      balanced:
+        example: true
+        type: boolean
+      difference:
+        example: "0.00"
+        type: string
+      parts:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine'
+        type: array
+      parts_total:
+        example: "900000.00"
+        type: string
+      top_up_total:
+        example: "900000.00"
+        type: string
+    type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.RegisterRequest:
     properties:
       email:
@@ -281,6 +514,18 @@ definitions:
     - name
     - password
     type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.StatusLine:
+    properties:
+      amount:
+        example: "900000.00"
+        type: string
+      icon:
+        example: "\U0001F4B0"
+        type: string
+      label:
+        example: Top-up
+        type: string
+    type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.SummaryResponse:
     properties:
       net_cash_flow:
@@ -295,8 +540,78 @@ definitions:
         example: "15000000.00"
         type: string
     type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramLinkResponse:
+    properties:
+      chat_id:
+        example: 123456789
+        type: integer
+      chat_title:
+        example: Reza
+        type: string
+      linked:
+        example: true
+        type: boolean
+      linked_at:
+        type: string
+      username:
+        example: rezani
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse:
+    properties:
+      code:
+        example: 7F3K9Q
+        type: string
+      expires_at:
+        type: string
+      instruction:
+        description: |-
+          Instruction is ready to show in the UI so the user does not have to be told the
+          command format separately.
+        example: Send /start 7F3K9Q to the bot
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramSendResponse:
+    properties:
+      characters:
+        description: |-
+          Characters is the rendered length before splitting, useful when a report grows near
+          the 4096-character limit.
+        example: 2480
+        type: integer
+      chat_id:
+        example: 123456789
+        type: integer
+      messages:
+        example: 1
+        type: integer
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TopUpSection:
+    properties:
+      allocation_total:
+        description: AllocationTotal sums Allocations; when it equals Total the section
+          is balanced.
+        example: "900000.00"
+        type: string
+      allocations:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine'
+        type: array
+      balanced:
+        example: true
+        type: boolean
+      total:
+        example: "900000.00"
+        type: string
+    type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TransactionCreateRequest:
     properties:
+      account_id:
+        description: |-
+          AccountID is where the money moved. It is optional; a transaction without one is
+          treated as cash flow.
+        example: 1
+        type: integer
       amount:
         example: "1150000.00"
         type: string
@@ -307,10 +622,21 @@ definitions:
         example: Cicilan Rumah September
         maxLength: 500
         type: string
+      parent_id:
+        description: |-
+          ParentID makes this row a detail line of another transaction, so the parent's amount
+          is reported once and its parts are still visible.
+        example: 12
+        type: integer
       reference_number:
         example: INV-0001
         maxLength: 100
         type: string
+      to_account_id:
+        description: ToAccountID is the other side of a transfer and is only allowed
+          on a TRANSFER.
+        example: 3
+        type: integer
       transaction_date:
         example: "2026-09-25"
         type: string
@@ -328,6 +654,12 @@ definitions:
     type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TransactionResponse:
     properties:
+      account_id:
+        example: 1
+        type: integer
+      account_name:
+        example: Cash Flow
+        type: string
       amount:
         example: "1150000.00"
         type: string
@@ -345,8 +677,17 @@ definitions:
       id:
         example: 1
         type: integer
+      parent_id:
+        example: 12
+        type: integer
       reference_number:
         example: INV-0001
+        type: string
+      to_account_id:
+        example: 3
+        type: integer
+      to_account_name:
+        example: Dompet Harian
         type: string
       transaction_date:
         example: "2026-09-25"
@@ -372,6 +713,61 @@ definitions:
         type: boolean
       name:
         example: John Doe
+        type: string
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletItem:
+    properties:
+      amount:
+        example: "100000.00"
+        type: string
+      label:
+        example: Tarik Tunai
+        type: string
+      sub_items:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine'
+        type: array
+    type: object
+  github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletSection:
+    properties:
+      account_id:
+        example: 3
+        type: integer
+      actual_balance:
+        example: "72500.00"
+        type: string
+      allotment:
+        description: Allotment is the total topped up into this wallet on the report
+          date.
+        example: "600000.00"
+        type: string
+      expected_remaining:
+        description: 'ExpectedRemaining is Allotment - RecordedTotal: what should
+          still be there.'
+        example: "100000.00"
+        type: string
+      has_actual_balance:
+        description: |-
+          HasActualBalance is false when nobody counted the wallet, in which case the report
+          stops at ExpectedRemaining instead of inventing a variance.
+        example: true
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletItem'
+        type: array
+      name:
+        example: Dompet Harian
+        type: string
+      recorded_total:
+        description: RecordedTotal sums Items, counting a parent once and never its
+          children.
+        example: "500000.00"
+        type: string
+      variance:
+        description: 'Variance is ExpectedRemaining - ActualBalance: spending that
+          was never written down.'
+        example: "27500.00"
         type: string
     type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope:
@@ -410,6 +806,325 @@ info:
   title: Financial Management API
   version: "1.0"
 paths:
+  /accounts:
+    get:
+      parameters:
+      - description: CASH_FLOW, WALLET, BANK, CREDIT_CARD or SAVINGS
+        in: query
+        name: account_type
+        type: string
+      - description: Filter by active flag
+        in: query
+        name: is_active
+        type: boolean
+      - description: Match name or description
+        in: query
+        name: search
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Rows per page, max 100
+        in: query
+        name: page_size
+        type: integer
+      - description: name, account_type, opening_balance or created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: asc or desc
+        in: query
+        name: sort_dir
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.PagedData'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List accounts
+      tags:
+      - Accounts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create account
+      tags:
+      - Accounts
+  /accounts/{id}:
+    delete:
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete account
+      tags:
+      - Accounts
+    get:
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get account
+      tags:
+      - Accounts
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Account
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update account
+      tags:
+      - Accounts
+  /accounts/{id}/balances:
+    get:
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: List observed balances
+      tags:
+      - Accounts
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Stores what the account really held on a day. Recording the same day twice
+        overwrites the figure. The gap against the recorded transactions is what the
+        daily report shows as spending that was never written down.
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Balance
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Record observed balance
+      tags:
+      - Accounts
+  /accounts/{id}/balances/{balance_id}:
+    delete:
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Balance ID
+        in: path
+        name: balance_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete observed balance
+      tags:
+      - Accounts
+  /accounts/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Set account status
+      tags:
+      - Accounts
   /auth/login:
     post:
       consumes:
@@ -899,6 +1614,42 @@ paths:
       summary: Cash flow report as PDF
       tags:
       - Reports
+  /reports/daily-cash-flow:
+    get:
+      description: |-
+        The same report the Telegram bot sends, as JSON. Sections with nothing to say are
+        omitted, and a wallet or bank only reports a variance once a balance has been
+        recorded for it.
+      parameters:
+      - description: Report date, YYYY-MM-DD. Defaults to today.
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.DailyCashFlowReport'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Daily cash flow report
+      tags:
+      - Reports
   /reports/expense-by-category:
     get:
       parameters:
@@ -1021,6 +1772,122 @@ paths:
       summary: Period summary
       tags:
       - Reports
+  /telegram/link:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Unlink Telegram chat
+      tags:
+      - Telegram
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramLinkResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Telegram link status
+      tags:
+      - Telegram
+  /telegram/pairing-code:
+    post:
+      description: |-
+        Returns a short-lived single-use code. Send "/start <code>" to the bot from the
+        chat that should receive reports. Until a chat is paired the bot answers nothing.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Issue Telegram pairing code
+      tags:
+      - Telegram
+  /telegram/send/daily-report:
+    post:
+      parameters:
+      - description: Report date, YYYY-MM-DD. Defaults to today.
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramSendResponse'
+              type: object
+        "422":
+          description: No chat is linked
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Send daily report to Telegram
+      tags:
+      - Telegram
+  /telegram/webhook:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Called by Telegram, not by clients. The X-Telegram-Bot-Api-Secret-Token header
+        must match TELEGRAM_WEBHOOK_SECRET, so knowing the URL is not enough to post
+        forged updates.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope'
+      summary: Telegram webhook
+      tags:
+      - Telegram
   /transactions:
     get:
       parameters:

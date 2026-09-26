@@ -17,10 +17,16 @@ const (
 )
 
 func newTransactionService() (TransactionService, *fakeTransactionRepository, *fakeCategoryRepository, *fakeTxManager) {
+	service, transactions, categories, _, txManager := newTransactionServiceWithAccounts()
+	return service, transactions, categories, txManager
+}
+
+func newTransactionServiceWithAccounts() (TransactionService, *fakeTransactionRepository, *fakeCategoryRepository, *fakeAccountRepository, *fakeTxManager) {
 	categories := newFakeCategoryRepository()
 	transactions := newFakeTransactionRepository(categories)
+	accounts := newFakeAccountRepository()
 	txManager := &fakeTxManager{}
-	return NewTransactionService(transactions, categories, txManager), transactions, categories, txManager
+	return NewTransactionService(transactions, categories, accounts, txManager), transactions, categories, accounts, txManager
 }
 
 func TestCreateTransactionStoresTheRow(t *testing.T) {

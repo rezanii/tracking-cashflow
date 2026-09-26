@@ -73,10 +73,16 @@ type Transaction struct {
 	Amount          decimal.Decimal `gorm:"column:amount;type:decimal(18,2);not null"`
 	Description     string          `gorm:"column:description;size:500"`
 	ReferenceNumber string          `gorm:"column:reference_number;size:100"`
+	AccountID       *int64          `gorm:"column:account_id"`
+	ToAccountID     *int64          `gorm:"column:to_account_id"`
+	ParentID        *int64          `gorm:"column:parent_id"`
 	CreatedAt       time.Time       `gorm:"column:created_at;not null"`
 	UpdatedAt       time.Time       `gorm:"column:updated_at;not null"`
 
-	Category *Category `gorm:"foreignKey:CategoryID;references:ID"`
+	Category  *Category     `gorm:"foreignKey:CategoryID;references:ID"`
+	Account   *Account      `gorm:"foreignKey:AccountID;references:ID"`
+	ToAccount *Account      `gorm:"foreignKey:ToAccountID;references:ID"`
+	Children  []Transaction `gorm:"foreignKey:ParentID;references:ID"`
 }
 
 func (Transaction) TableName() string { return "transactions" }
@@ -88,4 +94,13 @@ func (t Transaction) CategoryName() string {
 		return ""
 	}
 	return t.Category.Name
+}
+
+// AccountName returns the joined account name, or an empty string when the transaction is
+// not tied to an account or the relation was not preloaded.
+func (t Transaction) AccountName() string {
+	if t.Account == nil {
+		return ""
+	}
+	return t.Account.Name
 }

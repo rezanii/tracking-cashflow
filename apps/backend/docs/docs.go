@@ -15,6 +15,541 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/accounts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "List accounts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "CASH_FLOW, WALLET, BANK, CREDIT_CARD or SAVINGS",
+                        "name": "account_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by active flag",
+                        "name": "is_active",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match name or description",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Rows per page, max 100",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "name, account_type, opening_balance or created_at",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc or desc",
+                        "name": "sort_dir",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.PagedData"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Create account",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/accounts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Get account",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Update account",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Account",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Delete account",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/accounts/{id}/balances": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "List observed balances",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Stores what the account really held on a day. Recording the same day twice\noverwrites the figure. The gap against the recorded transactions is what the\ndaily report shows as spending that was never written down.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Record observed balance",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Balance",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/accounts/{id}/balances/{balance_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Delete observed balance",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Balance ID",
+                        "name": "balance_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/accounts/{id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Accounts"
+                ],
+                "summary": "Set account status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Account ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "consumes": [
@@ -835,6 +1370,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/reports/daily-cash-flow": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The same report the Telegram bot sends, as JSON. Sections with nothing to say are\nomitted, and a wallet or bank only reports a variance once a balance has been\nrecorded for it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Daily cash flow report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Report date, YYYY-MM-DD. Defaults to today.",
+                        "name": "date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.DailyCashFlowReport"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
         "/reports/expense-by-category": {
             "get": {
                 "security": [
@@ -1032,6 +1624,198 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/telegram/link": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Telegram"
+                ],
+                "summary": "Telegram link status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramLinkResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Telegram"
+                ],
+                "summary": "Unlink Telegram chat",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/telegram/pairing-code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a short-lived single-use code. Send \"/start \u003ccode\u003e\" to the bot from the\nchat that should receive reports. Until a chat is paired the bot answers nothing.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Telegram"
+                ],
+                "summary": "Issue Telegram pairing code",
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/telegram/send/daily-report": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Telegram"
+                ],
+                "summary": "Send daily report to Telegram",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Report date, YYYY-MM-DD. Defaults to today.",
+                        "name": "date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramSendResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "422": {
+                        "description": "No chat is linked",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/telegram/webhook": {
+            "post": {
+                "description": "Called by Telegram, not by clients. The X-Telegram-Bot-Api-Secret-Token header\nmust match TELEGRAM_WEBHOOK_SECRET, so knowing the URL is not enough to post\nforged updates.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Telegram"
+                ],
+                "summary": "Telegram webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_utils.Envelope"
                         }
@@ -1363,6 +2147,202 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountCreateRequest": {
+            "type": "object",
+            "required": [
+                "account_type",
+                "name"
+            ],
+            "properties": {
+                "account_type": {
+                    "type": "string",
+                    "enum": [
+                        "CASH_FLOW",
+                        "WALLET",
+                        "BANK",
+                        "CREDIT_CARD",
+                        "SAVINGS"
+                    ],
+                    "example": "WALLET"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "Allowance wallet"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 2,
+                    "example": "Dompet Harian"
+                },
+                "opening_balance": {
+                    "type": "string",
+                    "example": "0.00"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountResponse": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string",
+                    "example": "WALLET"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Allowance wallet"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Dompet Harian"
+                },
+                "opening_balance": {
+                    "type": "string",
+                    "example": "0.00"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AccountStatusRequest": {
+            "type": "object",
+            "required": [
+                "is_active"
+            ],
+            "properties": {
+                "is_active": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1150000.00"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Cicilan Rumah"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotRequest": {
+            "type": "object",
+            "required": [
+                "actual_balance",
+                "as_of_date"
+            ],
+            "properties": {
+                "actual_balance": {
+                    "type": "string",
+                    "example": "72500.00"
+                },
+                "as_of_date": {
+                    "type": "string",
+                    "example": "2026-09-25"
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "Counted by hand"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BalanceSnapshotResponse": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "account_name": {
+                    "type": "string",
+                    "example": "Dompet Harian"
+                },
+                "actual_balance": {
+                    "type": "string",
+                    "example": "72500.00"
+                },
+                "as_of_date": {
+                    "type": "string",
+                    "example": "2026-09-25"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "note": {
+                    "type": "string",
+                    "example": "Counted by hand"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BankSection": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "actual_balance": {
+                    "type": "string",
+                    "example": "20000.00"
+                },
+                "computed": {
+                    "description": "Computed is MoneyIn - Fees - MoneyOut: the day's own movement.",
+                    "type": "string",
+                    "example": "12500.00"
+                },
+                "fees": {
+                    "description": "Fees are direct charges on the account, such as a transfer fee.",
+                    "type": "string",
+                    "example": "2500.00"
+                },
+                "has_actual_balance": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "money_in": {
+                    "type": "string",
+                    "example": "915000.00"
+                },
+                "money_out": {
+                    "type": "string",
+                    "example": "900000.00"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Bank Utama"
+                },
+                "previous_balance": {
+                    "description": "PreviousBalance is ActualBalance - Computed: what was already sitting there, which is\nwhy the actual balance is not treated as a deduction from the wallet.",
+                    "type": "string",
+                    "example": "7500.00"
+                }
+            }
+        },
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CashFlowPoint": {
             "type": "object",
             "properties": {
@@ -1543,6 +2523,100 @@ const docTemplate = `{
                         "EXPENSE"
                     ],
                     "example": "EXPENSE"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CreditCardSection": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Bayar tagihan"
+                },
+                "net": {
+                    "type": "string",
+                    "example": "850000.00"
+                },
+                "payments": {
+                    "type": "string",
+                    "example": "1750000.00"
+                },
+                "taken_back": {
+                    "description": "TakenBack is money moved off the card into another account, the top-up source.",
+                    "type": "string",
+                    "example": "900000.00"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.DailyCashFlowReport": {
+            "type": "object",
+            "properties": {
+                "banks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.BankSection"
+                    }
+                },
+                "cash_flow_expenses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine"
+                    }
+                },
+                "cash_flow_total": {
+                    "type": "string",
+                    "example": "5000000.00"
+                },
+                "credit_cards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.CreditCardSection"
+                    }
+                },
+                "date": {
+                    "description": "Date is the day the report covers.",
+                    "type": "string",
+                    "example": "2026-09-25"
+                },
+                "date_label": {
+                    "description": "DateLabel is the short day heading, e.g. \"25/09\".",
+                    "type": "string",
+                    "example": "25/09"
+                },
+                "opening_balance": {
+                    "type": "string",
+                    "example": "8500000.00"
+                },
+                "opening_balance_label": {
+                    "type": "string",
+                    "example": "Saldo Awal Cash Flow"
+                },
+                "period_label": {
+                    "description": "PeriodLabel is the month heading, already localised, e.g. \"SEPTEMBER 2026\".",
+                    "type": "string",
+                    "example": "SEPTEMBER 2026"
+                },
+                "reconciliation": {
+                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.ReconciliationSection"
+                },
+                "status": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.StatusLine"
+                    }
+                },
+                "top_up": {
+                    "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TopUpSection"
+                },
+                "wallets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletSection"
+                    }
                 }
             }
         },
@@ -1733,6 +2807,33 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.ReconciliationSection": {
+            "type": "object",
+            "properties": {
+                "balanced": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "difference": {
+                    "type": "string",
+                    "example": "0.00"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine"
+                    }
+                },
+                "parts_total": {
+                    "type": "string",
+                    "example": "900000.00"
+                },
+                "top_up_total": {
+                    "type": "string",
+                    "example": "900000.00"
+                }
+            }
+        },
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.RegisterRequest": {
             "type": "object",
             "required": [
@@ -1759,6 +2860,23 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.StatusLine": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "900000.00"
+                },
+                "icon": {
+                    "type": "string",
+                    "example": "💰"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Top-up"
+                }
+            }
+        },
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.SummaryResponse": {
             "type": "object",
             "properties": {
@@ -1779,6 +2897,89 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramLinkResponse": {
+            "type": "object",
+            "properties": {
+                "chat_id": {
+                    "type": "integer",
+                    "example": 123456789
+                },
+                "chat_title": {
+                    "type": "string",
+                    "example": "Reza"
+                },
+                "linked": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "linked_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "rezani"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "7F3K9Q"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "instruction": {
+                    "description": "Instruction is ready to show in the UI so the user does not have to be told the\ncommand format separately.",
+                    "type": "string",
+                    "example": "Send /start 7F3K9Q to the bot"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramSendResponse": {
+            "type": "object",
+            "properties": {
+                "characters": {
+                    "description": "Characters is the rendered length before splitting, useful when a report grows near\nthe 4096-character limit.",
+                    "type": "integer",
+                    "example": 2480
+                },
+                "chat_id": {
+                    "type": "integer",
+                    "example": 123456789
+                },
+                "messages": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TopUpSection": {
+            "type": "object",
+            "properties": {
+                "allocation_total": {
+                    "description": "AllocationTotal sums Allocations; when it equals Total the section is balanced.",
+                    "type": "string",
+                    "example": "900000.00"
+                },
+                "allocations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine"
+                    }
+                },
+                "balanced": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "total": {
+                    "type": "string",
+                    "example": "900000.00"
+                }
+            }
+        },
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TransactionCreateRequest": {
             "type": "object",
             "required": [
@@ -1787,6 +2988,11 @@ const docTemplate = `{
                 "transaction_type"
             ],
             "properties": {
+                "account_id": {
+                    "description": "AccountID is where the money moved. It is optional; a transaction without one is\ntreated as cash flow.",
+                    "type": "integer",
+                    "example": 1
+                },
                 "amount": {
                     "type": "string",
                     "example": "1150000.00"
@@ -1800,10 +3006,20 @@ const docTemplate = `{
                     "maxLength": 500,
                     "example": "Cicilan Rumah September"
                 },
+                "parent_id": {
+                    "description": "ParentID makes this row a detail line of another transaction, so the parent's amount\nis reported once and its parts are still visible.",
+                    "type": "integer",
+                    "example": 12
+                },
                 "reference_number": {
                     "type": "string",
                     "maxLength": 100,
                     "example": "INV-0001"
+                },
+                "to_account_id": {
+                    "description": "ToAccountID is the other side of a transfer and is only allowed on a TRANSFER.",
+                    "type": "integer",
+                    "example": 3
                 },
                 "transaction_date": {
                     "type": "string",
@@ -1823,6 +3039,14 @@ const docTemplate = `{
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TransactionResponse": {
             "type": "object",
             "properties": {
+                "account_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "account_name": {
+                    "type": "string",
+                    "example": "Cash Flow"
+                },
                 "amount": {
                     "type": "string",
                     "example": "1150000.00"
@@ -1846,9 +3070,21 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
+                "parent_id": {
+                    "type": "integer",
+                    "example": 12
+                },
                 "reference_number": {
                     "type": "string",
                     "example": "INV-0001"
+                },
+                "to_account_id": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "to_account_name": {
+                    "type": "string",
+                    "example": "Dompet Harian"
                 },
                 "transaction_date": {
                     "type": "string",
@@ -1884,6 +3120,73 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "John Doe"
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletItem": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "100000.00"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Tarik Tunai"
+                },
+                "sub_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine"
+                    }
+                }
+            }
+        },
+        "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletSection": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "actual_balance": {
+                    "type": "string",
+                    "example": "72500.00"
+                },
+                "allotment": {
+                    "description": "Allotment is the total topped up into this wallet on the report date.",
+                    "type": "string",
+                    "example": "600000.00"
+                },
+                "expected_remaining": {
+                    "description": "ExpectedRemaining is Allotment - RecordedTotal: what should still be there.",
+                    "type": "string",
+                    "example": "100000.00"
+                },
+                "has_actual_balance": {
+                    "description": "HasActualBalance is false when nobody counted the wallet, in which case the report\nstops at ExpectedRemaining instead of inventing a variance.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.WalletItem"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Dompet Harian"
+                },
+                "recorded_total": {
+                    "description": "RecordedTotal sums Items, counting a parent once and never its children.",
+                    "type": "string",
+                    "example": "500000.00"
+                },
+                "variance": {
+                    "description": "Variance is ExpectedRemaining - ActualBalance: spending that was never written down.",
+                    "type": "string",
+                    "example": "27500.00"
                 }
             }
         },

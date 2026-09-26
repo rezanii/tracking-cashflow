@@ -34,7 +34,7 @@ func (r *transactionRepository) WithTx(tx *gorm.DB) TransactionRepository {
 }
 
 func (r *transactionRepository) Create(ctx context.Context, transaction *model.Transaction) error {
-	return r.db.WithContext(ctx).Omit("Category").Create(transaction).Error
+	return r.db.WithContext(ctx).Omit("Category", "Account", "ToAccount", "Children").Create(transaction).Error
 }
 
 func (r *transactionRepository) Update(ctx context.Context, transaction *model.Transaction) error {
@@ -48,6 +48,9 @@ func (r *transactionRepository) Update(ctx context.Context, transaction *model.T
 			"amount":           transaction.Amount,
 			"description":      transaction.Description,
 			"reference_number": transaction.ReferenceNumber,
+			"account_id":       transaction.AccountID,
+			"to_account_id":    transaction.ToAccountID,
+			"parent_id":        transaction.ParentID,
 			"updated_at":       transaction.UpdatedAt,
 		})
 	if result.Error != nil {
@@ -76,6 +79,8 @@ func (r *transactionRepository) FindByID(ctx context.Context, userID, id int64) 
 	var transaction model.Transaction
 	err := r.db.WithContext(ctx).
 		Preload("Category").
+		Preload("Account").
+		Preload("ToAccount").
 		Where("id = ? AND user_id = ?", id, userID).
 		Take(&transaction).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -106,6 +111,8 @@ func (r *transactionRepository) List(ctx context.Context, userID int64, filter d
 	var transactions []model.Transaction
 	err := base.
 		Preload("Category").
+		Preload("Account").
+		Preload("ToAccount").
 		Order(column + " " + direction).
 		Order("id DESC").
 		Limit(filter.PageSize).
@@ -160,6 +167,11 @@ func (r *transactionRepository) applyFilters(query *gorm.DB, filter dto.Transact
 	}
 	if filter.CategoryID != nil {
 		query = query.Where("category_id = ?", *filter.CategoryID)
+	}
+	if filter.AccountID != nil {
+		// Either side of a transfer counts as touching the account, otherwise money moved
+		// into a wallet would be invisible when filtering by that wallet.
+		query = query.Where("(account_id = ? OR to_account_id = ?)", *filter.AccountID, *filter.AccountID)
 	}
 	return query
 }

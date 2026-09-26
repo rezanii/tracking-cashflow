@@ -25,6 +25,40 @@ type Config struct {
 	JWTExpiration time.Duration
 
 	CORSAllowedOrigins []string
+
+	Telegram TelegramConfig
+}
+
+// TelegramMode selects how updates reach the bot.
+type TelegramMode string
+
+const (
+	// TelegramModeOff disables the integration entirely.
+	TelegramModeOff TelegramMode = "off"
+	// TelegramModePolling pulls updates with getUpdates, which needs no public URL.
+	TelegramModePolling TelegramMode = "polling"
+	// TelegramModeWebhook expects Telegram to POST to this service over HTTPS.
+	TelegramModeWebhook TelegramMode = "webhook"
+)
+
+type TelegramConfig struct {
+	BotToken string
+	Mode     TelegramMode
+	// WebhookSecret is compared against X-Telegram-Bot-Api-Secret-Token. Telegram sends
+	// whatever was passed to setWebhook, so an attacker who guesses the URL still cannot
+	// inject updates.
+	WebhookSecret string
+	// WebhookURL is only used by the setWebhook helper.
+	WebhookURL string
+	// APIBaseURL is overridable so tests can point the client at a local stub.
+	APIBaseURL string
+	// PairingCodeTTL bounds how long a pairing code stays usable.
+	PairingCodeTTL time.Duration
+}
+
+// Enabled reports whether the bot should do anything at all.
+func (t TelegramConfig) Enabled() bool {
+	return t.BotToken != "" && t.Mode != TelegramModeOff
 }
 
 func (c Config) IsProduction() bool {
@@ -60,6 +94,13 @@ func Load() (Config, error) {
 		DBName:             envString("DB_NAME", ""),
 		JWTSecret:          envString("JWT_SECRET", ""),
 		CORSAllowedOrigins: envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
+		Telegram: TelegramConfig{
+			BotToken:      envString("TELEGRAM_BOT_TOKEN", ""),
+			Mode:          TelegramMode(strings.ToLower(envString("TELEGRAM_MODE", string(TelegramModeOff)))),
+			WebhookSecret: envString("TELEGRAM_WEBHOOK_SECRET", ""),
+			WebhookURL:    envString("TELEGRAM_WEBHOOK_URL", ""),
+			APIBaseURL:    strings.TrimSuffix(envString("TELEGRAM_API_BASE_URL", "https://api.telegram.org"), "/"),
+		},
 	}
 
 	var err error
@@ -70,6 +111,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.JWTExpiration, err = envDuration("JWT_EXPIRATION", 24*time.Hour); err != nil {
+		return Config{}, err
+	}
+	if cfg.Telegram.PairingCodeTTL, err = envDuration("TELEGRAM_PAIRING_CODE_TTL", 15*time.Minute); err != nil {
 		return Config{}, err
 	}
 
@@ -98,6 +142,23 @@ func (c Config) validate() error {
 	}
 	if c.IsProduction() && len(c.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters in production")
+	}
+	return c.Telegram.validate()
+}
+
+func (t TelegramConfig) validate() error {
+	switch t.Mode {
+	case TelegramModeOff, TelegramModePolling, TelegramModeWebhook:
+	default:
+		return fmt.Errorf("TELEGRAM_MODE must be off, polling or webhook, got %q", t.Mode)
+	}
+	if t.Mode != TelegramModeOff && t.BotToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required when TELEGRAM_MODE is %s", t.Mode)
+	}
+	// Without a secret any host that learns the URL could post forged updates, so the
+	// webhook is refused rather than exposed.
+	if t.Mode == TelegramModeWebhook && t.WebhookSecret == "" {
+		return fmt.Errorf("TELEGRAM_WEBHOOK_SECRET is required when TELEGRAM_MODE is webhook")
 	}
 	return nil
 }
