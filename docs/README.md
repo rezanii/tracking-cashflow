@@ -673,7 +673,7 @@ variance it produces, so a typo is visible immediately:
 | `/saldo Bank Utama 20000 2026-09-25` | same, for an earlier day |
 | `/catat Dompet Harian 25000 kopi` | records an expense |
 | `/topup Dompet Harian 600000` | transfers into the account from the bank |
-| `/topup Dompet Harian 600000 dari BCA` | names the source explicitly |
+| `/topup Dompet Harian 600000 dari Bank Utama` | names the source explicitly |
 | `/hapus 42` | deletes a transaction recorded by mistake |
 
 Account names may contain spaces and need no quoting: the longest matching name wins, so
@@ -722,22 +722,22 @@ Saldo Awal Cash Flow
 Rp8.500.000
 ━━━━━━━━━━━━━━
 💸 PENGELUARAN CASH FLOW
-• Cicilan Rumah : Rp1.150.000
-• Belanja Bulanan : Rp3.000.000
+• Cicilan Rumah : Rp1.200.000
+• Belanja Bulanan : Rp2.200.000
 ➡️ Total Pengeluaran : Rp5.000.000
 ━━━━━━━━━━━━━━
-💳 PAYMENT CC
-• Bayar tagihan : Rp1.750.000
+💳 PAYMENT KARTU KREDIT
+• Bayar Kartu Kredit : Rp1.750.000
 • Ambil kembali / Top-up : Rp900.000
-➡️ Net Payment CC
+➡️ Net Payment Kartu Kredit
 Rp1.750.000 − Rp900.000
 = Rp850.000
 ━━━━━━━━━━━━━━
 🏦 DOMPET HARIAN
 Jatah Dompet Harian : Rp600.000
-• Tarik Tunai : Rp100.000
-  ◦ Makan siang : Rp25.000
-  ◦ Bensin : Rp30.000
+• Tarik Tunai : Rp200.000
+  ◦ Makan siang : Rp45.000
+  ◦ Kopi : Rp25.000
 ➡️ Total transaksi tercatat
 Rp500.000
 ━━━━━━━━━━━━━━
@@ -764,7 +764,9 @@ expected figure instead of inventing a difference.
 
 `make seed` loads the worked example above on today's date, so `/report` with no argument
 returns the full report. Every figure in it — `850.000`, `500.000`, `100.000`, `27.500`,
-`12.500`, `7.500`, and a reconciliation difference of `0` — is computed, not stored. Only the
+`12.500`, `7.500`, and a reconciliation difference of `0` — is computed, not stored. The
+figures are invented: sample data is committed to a public repository, so it must never be
+anybody's real finances. Only the
 opening balance differs from the sample above, because it is derived from whatever history the
 seed left behind.
 

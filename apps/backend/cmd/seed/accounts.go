@@ -15,6 +15,11 @@ import (
 // The demo day is seeded on today's date so a bare /report in Telegram shows the full report
 // with no argument. Every other seeded transaction sits on an earlier day of the month, so
 // the day's own figures are exactly the ones defined here.
+//
+// The figures are invented, and deliberately so: this data is committed to a public
+// repository, and a sample must never be somebody's real finances. They are chosen to make
+// every section of the daily report non-trivial — a wallet that comes up short, a bank
+// carrying a balance from before, and a reconciliation that still lands on zero.
 const demoReferencePrefix = "DEMO-"
 
 type seedAccount struct {
@@ -43,9 +48,9 @@ type seedDemoTransaction struct {
 func demoAccounts() []seedAccount {
 	return []seedAccount{
 		{Name: "Cash Flow", Type: model.AccountTypeCashFlow, Description: "Household budget"},
-		{Name: "CC", Type: model.AccountTypeCreditCard, Description: "Credit card"},
+		{Name: "Kartu Kredit", Type: model.AccountTypeCreditCard, Description: "Credit card"},
 		{Name: "Bank Utama", Type: model.AccountTypeBank, Description: "Bank account", ActualBalance: "20000"},
-		{Name: "Dompet Harian", Type: model.AccountTypeWallet, Description: "Allowance wallet", ActualBalance: "72500"},
+		{Name: "Dompet Harian", Type: model.AccountTypeWallet, Description: "Daily allowance wallet", ActualBalance: "72500"},
 		{Name: "Dana Cadangan", Type: model.AccountTypeSavings, Description: "Emergency fund"},
 	}
 }
@@ -53,11 +58,11 @@ func demoAccounts() []seedAccount {
 // demoCategories are the categories the demo day needs on top of the generic ones.
 func demoCategories() []seedCategory {
 	return []seedCategory{
-		{Name: "Cicilan Motor", Type: model.CategoryTypeExpense, Description: "Instalment"},
-		{Name: "Listrik & Air", Type: model.CategoryTypeExpense, Description: "Debt instalment"},
-		{Name: "Internet", Type: model.CategoryTypeExpense, Description: "Household help"},
-		{Name: "Belanja Bulanan", Type: model.CategoryTypeExpense, Description: "Monthly living cost"},
-		{Name: "Tabungan Anak", Type: model.CategoryTypeExpense, Description: "Baby expenses"},
+		{Name: "Cicilan Rumah", Type: model.CategoryTypeExpense, Description: "Mortgage instalment"},
+		{Name: "Cicilan Motor", Type: model.CategoryTypeExpense, Description: "Vehicle instalment"},
+		{Name: "Listrik & Air", Type: model.CategoryTypeExpense, Description: "Utilities"},
+		{Name: "Internet", Type: model.CategoryTypeExpense, Description: "Internet and phone"},
+		{Name: "Belanja Bulanan", Type: model.CategoryTypeExpense, Description: "Monthly groceries"},
 		{Name: "Kebutuhan Harian", Type: model.CategoryTypeExpense, Description: "Daily wallet spending"},
 		{Name: "Pembayaran CC", Type: model.CategoryTypeExpense, Description: "Credit card bill"},
 		{Name: "Biaya Admin", Type: model.CategoryTypeExpense, Description: "Bank charges"},
@@ -67,48 +72,41 @@ func demoCategories() []seedCategory {
 
 func demoTransactions() []seedDemoTransaction {
 	return []seedDemoTransaction{
-		// Household cash flow for the day.
-		{Reference: "DEMO-CF-01", Type: model.TransactionTypeExpense, Category: "Cicilan Rumah", Account: "Cash Flow", Amount: "1150000", Description: "Cicilan Rumah"},
-		{Reference: "DEMO-CF-02", Type: model.TransactionTypeExpense, Category: "Cicilan Motor", Account: "Cash Flow", Amount: "1000000", Description: "Cicilan Motor"},
-		{Reference: "DEMO-CF-03", Type: model.TransactionTypeExpense, Category: "Listrik & Air", Account: "Cash Flow", Amount: "1000000", Description: "Listrik & Air"},
-		{Reference: "DEMO-CF-04", Type: model.TransactionTypeExpense, Category: "Internet", Account: "Cash Flow", Amount: "1000000", Description: "Internet"},
-		{Reference: "DEMO-CF-05", Type: model.TransactionTypeExpense, Category: "Belanja Bulanan", Account: "Cash Flow", Amount: "3000000", Description: "Belanja Bulanan"},
-		{Reference: "DEMO-CF-06", Type: model.TransactionTypeExpense, Category: "Tabungan Anak", Account: "Cash Flow", Amount: "1000000", Description: "Tabungan Anak"},
+		// Household cash flow for the day: 5.000.000 in total.
+		{Reference: "DEMO-CF-01", Type: model.TransactionTypeExpense, Category: "Cicilan Rumah", Account: "Cash Flow", Amount: "1200000", Description: "Cicilan Rumah"},
+		{Reference: "DEMO-CF-02", Type: model.TransactionTypeExpense, Category: "Cicilan Motor", Account: "Cash Flow", Amount: "800000", Description: "Cicilan Motor"},
+		{Reference: "DEMO-CF-03", Type: model.TransactionTypeExpense, Category: "Listrik & Air", Account: "Cash Flow", Amount: "450000", Description: "Listrik & Air"},
+		{Reference: "DEMO-CF-04", Type: model.TransactionTypeExpense, Category: "Internet", Account: "Cash Flow", Amount: "350000", Description: "Internet"},
+		{Reference: "DEMO-CF-05", Type: model.TransactionTypeExpense, Category: "Belanja Bulanan", Account: "Cash Flow", Amount: "2200000", Description: "Belanja Bulanan"},
 
 		// The card bill, and the part of it taken back into the bank. The money taken back is
-		// a transfer, not a second expense, which is what makes the net figure meaningful.
-		{Reference: "DEMO-CC-01", Type: model.TransactionTypeExpense, Category: "Pembayaran CC", Account: "CC", Amount: "1750000", Description: "Bayar tagihan"},
-		{Reference: "DEMO-CC-02", Type: model.TransactionTypeTransfer, Account: "CC", ToAccount: "Bank Utama", Amount: "900000", Description: "Ambil kembali / Top-up"},
+		// a transfer, not a second expense, which is what makes the net figure meaningful:
+		// 1.750.000 paid - 900.000 taken back = 850.000.
+		{Reference: "DEMO-CC-01", Type: model.TransactionTypeExpense, Category: "Pembayaran CC", Account: "Kartu Kredit", Amount: "1750000", Description: "Bayar tagihan"},
+		{Reference: "DEMO-CC-02", Type: model.TransactionTypeTransfer, Account: "Kartu Kredit", ToAccount: "Bank Utama", Amount: "900000", Description: "Ambil kembali / Top-up"},
 
 		// The bank leg: other money arriving, the transfer fee, and the two allocations out.
-		{Reference: "DEMO-BK-01", Type: model.TransactionTypeIncome, Category: "Dana Masuk", Account: "Bank Utama", Amount: "15000", Description: "Dana masuk lain"},
-		{Reference: "DEMO-BK-02", Type: model.TransactionTypeExpense, Category: "Biaya Admin", Account: "Bank Utama", Amount: "2500", Description: "Admin BI-Fast"},
-		{Reference: "DEMO-TU-01", Type: model.TransactionTypeTransfer, Account: "Bank Utama", ToAccount: "Dana Cadangan", Amount: "1000000", Description: "Alokasi Dana Cadangan"},
+		// 915.000 in - 2.500 fee - 900.000 out = 12.500 of movement today.
+		{Reference: "DEMO-BK-01", Type: model.TransactionTypeIncome, Category: "Dana Masuk", Account: "Bank Utama", Amount: "15000", Description: "Bunga tabungan"},
+		{Reference: "DEMO-BK-02", Type: model.TransactionTypeExpense, Category: "Biaya Admin", Account: "Bank Utama", Amount: "2500", Description: "Biaya transfer"},
+		{Reference: "DEMO-TU-01", Type: model.TransactionTypeTransfer, Account: "Bank Utama", ToAccount: "Dana Cadangan", Amount: "300000", Description: "Alokasi Dana Cadangan"},
 		{Reference: "DEMO-TU-02", Type: model.TransactionTypeTransfer, Account: "Bank Utama", ToAccount: "Dompet Harian", Amount: "600000", Description: "Jatah Dompet Harian"},
 
 		// What the allowance was spent on. The withdrawal is recorded once and its parts are
-		// listed underneath, so the recorded total stays 500.000.
-		{Reference: "DEMO-LA-01", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "150000", Description: "Listrik"},
+		// listed underneath, so the recorded total stays 500.000 rather than 700.000.
+		{Reference: "DEMO-DH-01", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "150000", Description: "Bensin"},
 		{
-			Reference: "DEMO-LA-02", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "100000", Description: "Tarik Tunai",
+			Reference: "DEMO-DH-02", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "200000", Description: "Tarik Tunai",
 			Children: []seedDemoTransaction{
-				{Reference: "DEMO-LA-02-A", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "25000", Description: "Makan siang"},
-				{Reference: "DEMO-LA-02-B", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "30000", Description: "Bensin"},
-				{Reference: "DEMO-LA-02-C", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "10000", Description: "Parkir"},
-				{Reference: "DEMO-LA-02-D", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "10000", Description: "Jajan anak"},
-				{Reference: "DEMO-LA-02-E", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "25000", Description: "Sisa tunai"},
+				{Reference: "DEMO-DH-02-A", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "45000", Description: "Makan siang"},
+				{Reference: "DEMO-DH-02-B", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "25000", Description: "Kopi"},
+				{Reference: "DEMO-DH-02-C", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "10000", Description: "Parkir"},
+				{Reference: "DEMO-DH-02-D", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "20000", Description: "Jajan anak"},
+				{Reference: "DEMO-DH-02-E", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "100000", Description: "Sisa tunai"},
 			},
 		},
-		{
-			Reference: "DEMO-LA-03", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "29000", Description: "Jajan",
-			Children: []seedDemoTransaction{
-				{Reference: "DEMO-LA-03-A", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "20000", Description: "Makan siang"},
-				{Reference: "DEMO-LA-03-B", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "7500", Description: "Kopi"},
-				{Reference: "DEMO-LA-03-C", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "1500", Description: "Air mineral"},
-			},
-		},
-		{Reference: "DEMO-LA-04", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "100000", Description: "Pulsa"},
-		{Reference: "DEMO-LA-05", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "50000", Description: "Obat"},
+		{Reference: "DEMO-DH-03", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "100000", Description: "Pulsa"},
+		{Reference: "DEMO-DH-04", Type: model.TransactionTypeExpense, Category: "Kebutuhan Harian", Account: "Dompet Harian", Amount: "50000", Description: "Obat"},
 	}
 }
 

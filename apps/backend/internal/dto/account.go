@@ -10,7 +10,7 @@ type AccountCreateRequest struct {
 	Name           string          `json:"name" validate:"required,min=2,max=100" example:"Dompet Harian"`
 	AccountType    string          `json:"account_type" validate:"required,oneof=CASH_FLOW WALLET BANK CREDIT_CARD SAVINGS" example:"WALLET"`
 	OpeningBalance decimal.Decimal `json:"opening_balance" swaggertype:"string" example:"0.00"`
-	Description    string          `json:"description" validate:"max=255" example:"Allowance wallet"`
+	Description    string          `json:"description" validate:"max=255" example:"Daily allowance wallet"`
 }
 
 type AccountUpdateRequest = AccountCreateRequest
@@ -24,7 +24,7 @@ type AccountResponse struct {
 	Name           string          `json:"name" example:"Dompet Harian"`
 	AccountType    string          `json:"account_type" example:"WALLET"`
 	OpeningBalance decimal.Decimal `json:"opening_balance" swaggertype:"string" example:"0.00"`
-	Description    string          `json:"description" example:"Allowance wallet"`
+	Description    string          `json:"description" example:"Daily allowance wallet"`
 	IsActive       bool            `json:"is_active" example:"true"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`

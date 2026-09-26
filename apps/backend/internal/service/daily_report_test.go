@@ -24,11 +24,21 @@ const (
 
 // newReportScenario builds the worked example end to end: a household day, a card bill with
 // part of it taken back, a top-up split between savings and an allowance, a wallet whose
-// counted balance is short, and a bank account carrying a previous balance.
+// counted balance is short, and a bank account carrying a balance from before.
+//
+// The figures are invented, and they are chosen so every relationship the report asserts is
+// non-trivial and still adds up:
+//
+//	cash flow   1.200.000 + 800.000 + 450.000 + 350.000 + 2.200.000 = 5.000.000
+//	card        1.750.000 paid - 900.000 taken back                 =   850.000
+//	top-up        300.000 savings + 600.000 wallet                  =   900.000
+//	wallet        600.000 - 500.000 recorded = 100.000 expected; 72.500 counted -> 27.500 short
+//	bank          915.000 in - 2.500 fee - 900.000 out = 12.500; 20.000 counted -> 7.500 before
+//	reconcile     300.000 + 500.000 + 27.500 + 72.500                =   900.000, difference 0
 func newReportScenario() (DailyReportService, *fakeDailyReportRepository, *fakeAccountRepository) {
 	accounts := newFakeAccountRepository()
 	cashFlow := accounts.seed(ownerID, "Cash Flow", model.AccountTypeCashFlow, true)
-	card := accounts.seed(ownerID, "CC", model.AccountTypeCreditCard, true)
+	card := accounts.seed(ownerID, "Kartu Kredit", model.AccountTypeCreditCard, true)
 	bank := accounts.seed(ownerID, "Bank Utama", model.AccountTypeBank, true)
 	wallet := accounts.seed(ownerID, "Dompet Harian", model.AccountTypeWallet, true)
 	savings := accounts.seed(ownerID, "Dana Cadangan", model.AccountTypeSavings, true)
@@ -52,12 +62,11 @@ func newReportScenario() (DailyReportService, *fakeDailyReportRepository, *fakeA
 	daily := newFakeDailyReportRepository()
 	daily.openingBalance = decimalOf("8500000")
 	daily.cashFlow = []repository.LabelledAmount{
-		{Label: "Cicilan Rumah", Amount: decimalOf("1150000")},
-		{Label: "Cicilan Motor", Amount: decimalOf("1000000")},
-		{Label: "Listrik & Air", Amount: decimalOf("1000000")},
-		{Label: "Internet", Amount: decimalOf("1000000")},
-		{Label: "Belanja Bulanan", Amount: decimalOf("3000000")},
-		{Label: "Tabungan Anak", Amount: decimalOf("1000000")},
+		{Label: "Cicilan Rumah", Amount: decimalOf("1200000")},
+		{Label: "Cicilan Motor", Amount: decimalOf("800000")},
+		{Label: "Listrik & Air", Amount: decimalOf("450000")},
+		{Label: "Internet", Amount: decimalOf("350000")},
+		{Label: "Belanja Bulanan", Amount: decimalOf("2200000")},
 	}
 	daily.flows = map[int64]repository.AccountFlow{
 		cardAccountID: {
@@ -75,7 +84,8 @@ func newReportScenario() (DailyReportService, *fakeDailyReportRepository, *fakeA
 			TransferOut:  decimalOf("900000"),
 		},
 		walletAccountID: {
-			AccountID:    walletAccountID,
+			AccountID: walletAccountID,
+			// Parents only: the withdrawal's detail lines must not be counted again.
 			TransferIn:   decimalOf("600000"),
 			ExpenseTotal: decimalOf("500000"),
 			IncomeTotal:  decimalOf("0"),
@@ -83,29 +93,24 @@ func newReportScenario() (DailyReportService, *fakeDailyReportRepository, *fakeA
 		},
 	}
 	daily.transfers = []repository.TransferEdge{
-		{ID: 1, FromAccountID: &card.ID, FromAccountName: "CC", FromAccountType: "CREDIT_CARD",
+		{ID: 1, FromAccountID: &card.ID, FromAccountName: "Kartu Kredit", FromAccountType: "CREDIT_CARD",
 			ToAccountID: bank.ID, ToAccountName: "Bank Utama", ToAccountType: "BANK", Amount: decimalOf("900000")},
 		{ID: 2, FromAccountID: &bank.ID, FromAccountName: "Bank Utama", FromAccountType: "BANK",
-			ToAccountID: savings.ID, ToAccountName: "Dana Cadangan", ToAccountType: "SAVINGS", Amount: decimalOf("1000000")},
+			ToAccountID: savings.ID, ToAccountName: "Dana Cadangan", ToAccountType: "SAVINGS", Amount: decimalOf("300000")},
 		{ID: 3, FromAccountID: &bank.ID, FromAccountName: "Bank Utama", FromAccountType: "BANK",
 			ToAccountID: wallet.ID, ToAccountName: "Dompet Harian", ToAccountType: "WALLET", Amount: decimalOf("600000")},
 	}
 	daily.expenses[walletAccountID] = []model.Transaction{
-		{ID: 10, Amount: decimalOf("150000"), Description: "Listrik"},
-		{ID: 11, Amount: decimalOf("100000"), Description: "Tarik Tunai", Children: []model.Transaction{
-			{ID: 12, Amount: decimalOf("25000"), Description: "Makan siang"},
-			{ID: 13, Amount: decimalOf("30000"), Description: "Bensin"},
+		{ID: 10, Amount: decimalOf("150000"), Description: "Bensin"},
+		{ID: 11, Amount: decimalOf("200000"), Description: "Tarik Tunai", Children: []model.Transaction{
+			{ID: 12, Amount: decimalOf("45000"), Description: "Makan siang"},
+			{ID: 13, Amount: decimalOf("25000"), Description: "Kopi"},
 			{ID: 14, Amount: decimalOf("10000"), Description: "Parkir"},
-			{ID: 15, Amount: decimalOf("10000"), Description: "Jajan anak"},
-			{ID: 16, Amount: decimalOf("25000"), Description: "Sisa tunai"},
+			{ID: 15, Amount: decimalOf("20000"), Description: "Jajan anak"},
+			{ID: 16, Amount: decimalOf("100000"), Description: "Sisa tunai"},
 		}},
-		{ID: 17, Amount: decimalOf("29000"), Description: "Jajan", Children: []model.Transaction{
-			{ID: 18, Amount: decimalOf("20000"), Description: "Makan siang"},
-			{ID: 19, Amount: decimalOf("7500"), Description: "Kopi"},
-			{ID: 20, Amount: decimalOf("1500"), Description: "Air mineral"},
-		}},
-		{ID: 21, Amount: decimalOf("100000"), Description: "Pulsa"},
-		{ID: 22, Amount: decimalOf("50000"), Description: "Obat"},
+		{ID: 17, Amount: decimalOf("100000"), Description: "Pulsa"},
+		{ID: 18, Amount: decimalOf("50000"), Description: "Obat"},
 	}
 
 	return NewDailyReportService(daily, accounts), daily, accounts
@@ -132,11 +137,11 @@ func TestDailyReportReproducesTheWorkedExample(t *testing.T) {
 		if !report.OpeningBalance.Equal(decimalOf("8500000")) {
 			t.Fatalf("opening balance = %s, want 8500000", report.OpeningBalance)
 		}
-		if len(report.CashFlowExpenses) != 6 {
-			t.Fatalf("expense lines = %d, want 6", len(report.CashFlowExpenses))
+		if len(report.CashFlowExpenses) != 5 {
+			t.Fatalf("expense lines = %d, want 5", len(report.CashFlowExpenses))
 		}
 		// The order is the order the day was recorded in, not alphabetical.
-		if report.CashFlowExpenses[0].Label != "Cicilan Rumah" || report.CashFlowExpenses[5].Label != "Tabungan Anak" {
+		if report.CashFlowExpenses[0].Label != "Cicilan Rumah" || report.CashFlowExpenses[4].Label != "Belanja Bulanan" {
 			t.Fatalf("expense order drifted: %+v", report.CashFlowExpenses)
 		}
 		if !report.CashFlowTotal.Equal(decimalOf("5000000")) {
@@ -182,9 +187,9 @@ func TestDailyReportReproducesTheWorkedExample(t *testing.T) {
 		if !wallet.Allotment.Equal(decimalOf("600000")) {
 			t.Fatalf("allotment = %s, want 600000", wallet.Allotment)
 		}
-		// Five recorded items; the withdrawal's own parts must not be added on top.
-		if len(wallet.Items) != 5 {
-			t.Fatalf("items = %d, want 5", len(wallet.Items))
+		// Four recorded items; the withdrawal's own parts must not be added on top.
+		if len(wallet.Items) != 4 {
+			t.Fatalf("items = %d, want 4", len(wallet.Items))
 		}
 		if len(wallet.Items[1].SubItems) != 5 {
 			t.Fatalf("withdrawal sub-items = %d, want 5", len(wallet.Items[1].SubItems))
@@ -245,7 +250,10 @@ func TestDailyReportReproducesTheWorkedExample(t *testing.T) {
 		for _, line := range report.Status {
 			labels[line.Label] = true
 		}
-		for _, want := range []string{"Top-up", "Dana Cadangan", "Transaksi Dompet Harian tercatat", "Transaksi belum tercatat", "Saldo Aktual Dompet Harian", "Saldo Bank Utama"} {
+		for _, want := range []string{
+			"Top-up", "Dana Cadangan", "Transaksi Dompet Harian tercatat",
+			"Transaksi belum tercatat", "Saldo Aktual Dompet Harian", "Saldo Bank Utama",
+		} {
 			if !labels[want] {
 				t.Fatalf("status is missing %q: %+v", want, labels)
 			}
@@ -274,7 +282,7 @@ func TestDailyReportWithoutAnObservedBalanceReportsNoVariance(t *testing.T) {
 	if !report.Banks[0].PreviousBalance.IsZero() {
 		t.Fatalf("bank previous balance = %s, want 0 when nothing was counted", report.Banks[0].PreviousBalance)
 	}
-	// 1.000.000 to savings + 500.000 recorded + 100.000 expected remainder = 900.000.
+	// 300.000 to savings + 500.000 recorded + 100.000 expected remainder = 900.000.
 	if !report.Reconciliation.Balanced {
 		t.Fatalf("reconciliation should still balance: %s vs %s",
 			report.Reconciliation.PartsTotal, report.Reconciliation.TopUpTotal)

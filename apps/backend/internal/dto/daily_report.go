@@ -5,7 +5,7 @@ import "github.com/shopspring/decimal"
 // AmountLine is a labelled figure: one bullet in the report.
 type AmountLine struct {
 	Label  string          `json:"label" example:"Cicilan Rumah"`
-	Amount decimal.Decimal `json:"amount" swaggertype:"string" example:"1150000.00"`
+	Amount decimal.Decimal `json:"amount" swaggertype:"string" example:"1200000.00"`
 }
 
 // WalletItem is one recorded spend from a wallet. SubItems break a single recorded amount
@@ -101,7 +101,7 @@ type DailyCashFlowReport struct {
 	DateLabel string `json:"date_label" example:"25/09"`
 
 	OpeningBalanceLabel string          `json:"opening_balance_label" example:"Saldo Awal Cash Flow"`
-	OpeningBalance      decimal.Decimal `json:"opening_balance" swaggertype:"string" example:"8500000.00"`
+	OpeningBalance      decimal.Decimal `json:"opening_balance" swaggertype:"string" example:"5000000.00"`
 
 	CashFlowExpenses []AmountLine    `json:"cash_flow_expenses"`
 	CashFlowTotal    decimal.Decimal `json:"cash_flow_total" swaggertype:"string" example:"5000000.00"`

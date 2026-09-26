@@ -10,8 +10,8 @@ type TransactionCreateRequest struct {
 	TransactionDate string          `json:"transaction_date" validate:"required,datetime=2006-01-02" example:"2026-09-25"`
 	TransactionType string          `json:"transaction_type" validate:"required,oneof=INCOME EXPENSE TRANSFER" example:"EXPENSE"`
 	CategoryID      *int64          `json:"category_id" example:"5"`
-	Amount          decimal.Decimal `json:"amount" validate:"required" swaggertype:"string" example:"1150000.00"`
-	Description     string          `json:"description" validate:"max=500" example:"Cicilan Rumah September"`
+	Amount          decimal.Decimal `json:"amount" validate:"required" swaggertype:"string" example:"1200000.00"`
+	Description     string          `json:"description" validate:"max=500" example:"Cicilan Rumah"`
 	ReferenceNumber string          `json:"reference_number" validate:"max=100" example:"INV-0001"`
 	// AccountID is where the money moved. It is optional; a transaction without one is
 	// treated as cash flow.
@@ -31,8 +31,8 @@ type TransactionResponse struct {
 	TransactionType string          `json:"transaction_type" example:"EXPENSE"`
 	CategoryID      *int64          `json:"category_id" example:"5"`
 	CategoryName    string          `json:"category_name" example:"Cicilan Rumah"`
-	Amount          decimal.Decimal `json:"amount" swaggertype:"string" example:"1150000.00"`
-	Description     string          `json:"description" example:"Cicilan Rumah September"`
+	Amount          decimal.Decimal `json:"amount" swaggertype:"string" example:"1200000.00"`
+	Description     string          `json:"description" example:"Cicilan Rumah"`
 	ReferenceNumber string          `json:"reference_number" example:"INV-0001"`
 	AccountID       *int64          `json:"account_id" example:"1"`
 	AccountName     string          `json:"account_name" example:"Cash Flow"`

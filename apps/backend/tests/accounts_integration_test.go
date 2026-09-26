@@ -241,7 +241,7 @@ func TestDailyCashFlowReportOverHTTP(t *testing.T) {
 	h.registerAndLogin()
 
 	cashFlow := h.createAccount("Cash Flow", "CASH_FLOW")
-	card := h.createAccount("CC", "CREDIT_CARD")
+	card := h.createAccount("Kartu Kredit", "CREDIT_CARD")
 	bank := h.createAccount("Bank Utama", "BANK")
 	wallet := h.createAccount("Dompet Harian", "WALLET")
 	savings := h.createAccount("Dana Cadangan", "SAVINGS")

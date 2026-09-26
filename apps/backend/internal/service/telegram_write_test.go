@@ -11,17 +11,17 @@ import (
 
 func TestParseChatAmountAcceptsWhatAPersonTypes(t *testing.T) {
 	valid := map[string]string{
-		"25000":     "25000",
-		"25.000":    "25000",
-		"25,000":    "25000",
+		"25000":   "25000",
+		"25.000":  "25000",
+		"25,000":  "25000",
 		"600.000": "600000",
-		"25rb":      "25000",
-		"25 rb":     "25000",
-		"25ribu":    "25000",
-		"25k":       "25000",
-		"1jt":       "1000000",
-		"2 juta":    "2000000",
-		"1JT":       "1000000",
+		"25rb":    "25000",
+		"25 rb":   "25000",
+		"25ribu":  "25000",
+		"25k":     "25000",
+		"1jt":     "1000000",
+		"2 juta":  "2000000",
+		"1JT":     "1000000",
 	}
 	for input, want := range valid {
 		got, err := parseChatAmount(input)
@@ -54,10 +54,10 @@ func TestMatchAccountPrefersTheLongestName(t *testing.T) {
 	ctx := context.Background()
 
 	cases := map[string][2]string{
-		"Dana Cadangan 1000000":     {"Dana Cadangan", "1000000"},
-		"Dana 5000":                {"Dana", "5000"},
-		"Dompet Harian 25000 kopi":       {"Dompet Harian", "25000 kopi"},
-		"dompet harian 25000":            {"Dompet Harian", "25000"},
+		"Dana Cadangan 1000000":       {"Dana Cadangan", "1000000"},
+		"Dana 5000":                   {"Dana", "5000"},
+		"Dompet Harian 25000 kopi":    {"Dompet Harian", "25000 kopi"},
+		"dompet harian 25000":         {"Dompet Harian", "25000"},
 		"Bank Utama 20000 2026-09-25": {"Bank Utama", "20000 2026-09-25"},
 	}
 	for input, want := range cases {
@@ -100,7 +100,7 @@ func TestSaldoCommandRecordsTheBalance(t *testing.T) {
 	}
 	// The reply has to show the stored figure and the variance, so a typo is visible at once.
 	reply := client.sent[0]
-	for _, want := range []string{"54\\.165", "tercatat", "Belum tercatat"} {
+	for _, want := range []string{"72\\.500", "tercatat", "Belum tercatat"} {
 		if !strings.Contains(reply, want) {
 			t.Fatalf("reply is missing %q:\n%s", want, reply)
 		}

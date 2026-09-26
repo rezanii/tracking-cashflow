@@ -2168,7 +2168,7 @@ const docTemplate = `{
                 "description": {
                     "type": "string",
                     "maxLength": 255,
-                    "example": "Allowance wallet"
+                    "example": "Daily allowance wallet"
                 },
                 "name": {
                     "type": "string",
@@ -2194,7 +2194,7 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string",
-                    "example": "Allowance wallet"
+                    "example": "Daily allowance wallet"
                 },
                 "id": {
                     "type": "integer",
@@ -2234,7 +2234,7 @@ const docTemplate = `{
             "properties": {
                 "amount": {
                     "type": "string",
-                    "example": "1150000.00"
+                    "example": "1200000.00"
                 },
                 "label": {
                     "type": "string",
@@ -2589,7 +2589,7 @@ const docTemplate = `{
                 },
                 "opening_balance": {
                     "type": "string",
-                    "example": "8500000.00"
+                    "example": "5000000.00"
                 },
                 "opening_balance_label": {
                     "type": "string",
@@ -2924,9 +2924,19 @@ const docTemplate = `{
         "github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse": {
             "type": "object",
             "properties": {
+                "bot_username": {
+                    "description": "BotUsername is empty when the bot token could not be reached.",
+                    "type": "string",
+                    "example": "rezanibot"
+                },
                 "code": {
                     "type": "string",
                     "example": "7F3K9Q"
+                },
+                "deep_link": {
+                    "description": "DeepLink opens the chat and sends \"/start \u003ccode\u003e\" on a single tap, so nothing has to be\ntyped. It is empty when the bot username is unknown, and the UI then falls back to\nshowing the code.",
+                    "type": "string",
+                    "example": "https://t.me/rezanibot?start=7F3K9Q"
                 },
                 "expires_at": {
                     "type": "string"
@@ -2995,7 +3005,7 @@ const docTemplate = `{
                 },
                 "amount": {
                     "type": "string",
-                    "example": "1150000.00"
+                    "example": "1200000.00"
                 },
                 "category_id": {
                     "type": "integer",
@@ -3004,7 +3014,7 @@ const docTemplate = `{
                 "description": {
                     "type": "string",
                     "maxLength": 500,
-                    "example": "Cicilan Rumah September"
+                    "example": "Cicilan Rumah"
                 },
                 "parent_id": {
                     "description": "ParentID makes this row a detail line of another transaction, so the parent's amount\nis reported once and its parts are still visible.",
@@ -3049,7 +3059,7 @@ const docTemplate = `{
                 },
                 "amount": {
                     "type": "string",
-                    "example": "1150000.00"
+                    "example": "1200000.00"
                 },
                 "category_id": {
                     "type": "integer",
@@ -3064,7 +3074,7 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string",
-                    "example": "Cicilan Rumah September"
+                    "example": "Cicilan Rumah"
                 },
                 "id": {
                     "type": "integer",

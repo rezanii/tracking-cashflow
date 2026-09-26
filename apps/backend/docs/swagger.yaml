@@ -12,7 +12,7 @@ definitions:
         example: WALLET
         type: string
       description:
-        example: Allowance wallet
+        example: Daily allowance wallet
         maxLength: 255
         type: string
       name:
@@ -35,7 +35,7 @@ definitions:
       created_at:
         type: string
       description:
-        example: Allowance wallet
+        example: Daily allowance wallet
         type: string
       id:
         example: 1
@@ -63,7 +63,7 @@ definitions:
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.AmountLine:
     properties:
       amount:
-        example: "1150000.00"
+        example: "1200000.00"
         type: string
       label:
         example: Cicilan Rumah
@@ -323,7 +323,7 @@ definitions:
         example: 25/09
         type: string
       opening_balance:
-        example: "8500000.00"
+        example: "5000000.00"
         type: string
       opening_balance_label:
         example: Saldo Awal Cash Flow
@@ -559,8 +559,19 @@ definitions:
     type: object
   github_com_rezanii_tracking-cashflow_apps_backend_internal_dto.TelegramPairingCodeResponse:
     properties:
+      bot_username:
+        description: BotUsername is empty when the bot token could not be reached.
+        example: rezanibot
+        type: string
       code:
         example: 7F3K9Q
+        type: string
+      deep_link:
+        description: |-
+          DeepLink opens the chat and sends "/start <code>" on a single tap, so nothing has to be
+          typed. It is empty when the bot username is unknown, and the UI then falls back to
+          showing the code.
+        example: https://t.me/rezanibot?start=7F3K9Q
         type: string
       expires_at:
         type: string
@@ -613,13 +624,13 @@ definitions:
         example: 1
         type: integer
       amount:
-        example: "1150000.00"
+        example: "1200000.00"
         type: string
       category_id:
         example: 5
         type: integer
       description:
-        example: Cicilan Rumah September
+        example: Cicilan Rumah
         maxLength: 500
         type: string
       parent_id:
@@ -661,7 +672,7 @@ definitions:
         example: Cash Flow
         type: string
       amount:
-        example: "1150000.00"
+        example: "1200000.00"
         type: string
       category_id:
         example: 5
@@ -672,7 +683,7 @@ definitions:
       created_at:
         type: string
       description:
-        example: Cicilan Rumah September
+        example: Cicilan Rumah
         type: string
       id:
         example: 1

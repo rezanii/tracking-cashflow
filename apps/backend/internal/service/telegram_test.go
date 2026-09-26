@@ -82,7 +82,7 @@ func TestRenderedReportEscapesEveryMarkdownSpecial(t *testing.T) {
 		t.Fatalf("unbalanced bold markers: %d unescaped asterisks", unescapedAsterisks)
 	}
 	// The amounts must survive escaping with their thousand separators intact.
-	if !strings.Contains(message, `Rp1\.106\.500`) {
+	if !strings.Contains(message, `Rp600\.000`) {
 		t.Fatalf("escaped amount is missing from the message:\n%s", message)
 	}
 }
@@ -100,7 +100,7 @@ func TestRenderedReportContainsEverySection(t *testing.T) {
 		"SALDO AWAL",
 		"PENGELUARAN CASH FLOW",
 		"PAYMENT CC",
-		"Net Payment CC",
+		"Net Payment Kartu Kredit",
 		"TOP\\-UP",
 		"DOMPET HARIAN",
 		"SISA DOMPET HARIAN",
@@ -113,7 +113,7 @@ func TestRenderedReportContainsEverySection(t *testing.T) {
 		}
 	}
 	// The sub-items of the withdrawal have to be visible, otherwise the breakdown is lost.
-	if !strings.Contains(message, "Makan siang") || !strings.Contains(message, "Air mineral") {
+	if !strings.Contains(message, "Makan siang") || !strings.Contains(message, "Sisa tunai") {
 		t.Fatal("wallet sub-items are missing from the message")
 	}
 }

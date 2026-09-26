@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -22,10 +23,20 @@ import (
 )
 
 const (
-	seedEmail    = "admin@example.com"
-	seedPassword = "Admin123!"
-	seedName     = "Admin Example"
+	defaultSeedEmail = "admin@example.com"
+	seedPassword     = "Admin123!"
+	seedName         = "Admin Example"
 )
+
+// seedEmail is overridable so the demo data can be attached to an account that already
+// exists — a real one on a hosted database, where creating a second account with a known
+// password would be worse than pointless.
+func seedEmail() string {
+	if email := strings.TrimSpace(os.Getenv("SEED_EMAIL")); email != "" {
+		return email
+	}
+	return defaultSeedEmail
+}
 
 type seedCategory struct {
 	Name        string
@@ -102,20 +113,32 @@ func run() error {
 		return err
 	}
 
-	slog.Info("seed complete", "email", seedEmail, "password", seedPassword)
-	slog.Warn("the seeded credentials are for development only")
+	if seedEmail() == defaultSeedEmail {
+		slog.Info("seed complete", "email", defaultSeedEmail, "password", seedPassword)
+		slog.Warn("the seeded credentials are for development only")
+	} else {
+		slog.Info("seed complete", "email", seedEmail(), "note", "existing account, password untouched")
+	}
 	return nil
 }
 
 func ensureUser(tx *gorm.DB) (*model.User, error) {
+	email := seedEmail()
+
 	var existing model.User
-	err := tx.Where("email = ?", seedEmail).Take(&existing).Error
+	err := tx.Where("email = ?", email).Take(&existing).Error
 	if err == nil {
-		slog.Info("user already present", "email", seedEmail)
+		slog.Info("user already present", "email", email)
 		return &existing, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("look up seed user: %w", err)
+	}
+
+	// An account named explicitly is expected to exist already. Creating it with the known
+	// development password instead would hand out a credential nobody asked for.
+	if email != defaultSeedEmail {
+		return nil, fmt.Errorf("SEED_EMAIL %q does not exist; create the account first", email)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(seedPassword), 12)
@@ -126,7 +149,7 @@ func ensureUser(tx *gorm.DB) (*model.User, error) {
 	now := time.Now().UTC()
 	user := &model.User{
 		Name:         seedName,
-		Email:        seedEmail,
+		Email:        email,
 		PasswordHash: string(hash),
 		IsActive:     true,
 		CreatedAt:    now,
@@ -135,7 +158,7 @@ func ensureUser(tx *gorm.DB) (*model.User, error) {
 	if err := tx.Create(user).Error; err != nil {
 		return nil, fmt.Errorf("create seed user: %w", err)
 	}
-	slog.Info("user created", "email", seedEmail)
+	slog.Info("user created", "email", email)
 	return user, nil
 }
 
