@@ -16,6 +16,7 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -34,6 +35,43 @@ export default function SettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // While a code is outstanding the page watches for the link appearing, so tapping START in
+  // Telegram is the last thing the user has to do. The poll stops as soon as it lands, when the
+  // code expires, or when the component goes away.
+  useEffect(() => {
+    if (!pairing || link?.linked) return;
+
+    let cancelled = false;
+    const expiresAt = new Date(pairing.expires_at).getTime();
+
+    const timer = setInterval(() => {
+      if (cancelled) return;
+      if (Date.now() > expiresAt) {
+        setPairing(null);
+        setNotice(null);
+        setError("Kode pairing sudah kedaluwarsa. Buat kode baru.");
+        return;
+      }
+      void telegramService
+        .status()
+        .then((status) => {
+          if (cancelled || !status.linked) return;
+          setLink(status);
+          setPairing(null);
+          setWaiting(false);
+          setNotice("Chat Telegram terhubung.");
+        })
+        .catch(() => {
+          // A failed poll is not worth surfacing: the next tick retries.
+        });
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pairing, link?.linked]);
 
   // Every action reloads the status afterwards, so what is on screen is what the server holds.
   async function run(action: () => Promise<string>) {
@@ -105,26 +143,58 @@ export default function SettingsPage() {
                 </dl>
               ) : (
                 <div className="space-y-4">
-                  <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-600">
-                    <li>Tekan <span className="font-medium">Buat Kode Pairing</span>.</li>
-                    <li>Buka bot Telegram Anda.</li>
-                    <li>
-                      Kirim <span className="font-mono">/start &lt;kode&gt;</span>. Kode hanya
-                      berlaku sekali dan akan kedaluwarsa.
-                    </li>
-                  </ol>
+                  {!pairing ? (
+                    <p className="text-sm text-slate-600">
+                      Tekan tombol di bawah. Telegram akan terbuka dan mengirim perintah
+                      penghubung sendiri, jadi tidak ada yang perlu diketik.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-4">
+                      {pairing.deep_link ? (
+                        <>
+                          <a
+                            href={pairing.deep_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => setWaiting(true)}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+                          >
+                            Buka Telegram dan Hubungkan
+                          </a>
+                          <p className="text-sm text-brand-700">
+                            Telegram akan membuka chat dengan{" "}
+                            <span className="font-medium">@{pairing.bot_username}</span>. Tekan
+                            <span className="font-medium"> START</span> bila diminta.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-brand-700">{pairing.instruction}</p>
+                      )}
 
-                  {pairing ? (
-                    <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
-                      <p className="font-mono text-2xl tracking-widest text-brand-800">
-                        {pairing.code}
-                      </p>
-                      <p className="mt-1 text-sm text-brand-700">{pairing.instruction}</p>
-                      <p className="mt-1 text-xs text-brand-600">
-                        Berlaku sampai {formatDateTime(pairing.expires_at)}
-                      </p>
+                      <div className="border-t border-brand-200 pt-3">
+                        <p className="text-xs uppercase tracking-wide text-brand-600">
+                          Bila tombol tidak bisa dibuka
+                        </p>
+                        <p className="mt-1 font-mono text-lg tracking-widest text-brand-800">
+                          /start {pairing.code}
+                        </p>
+                        <p className="mt-1 text-xs text-brand-600">
+                          Kirim manual ke bot. Berlaku sampai {formatDateTime(pairing.expires_at)},
+                          sekali pakai.
+                        </p>
+                      </div>
+
+                      {waiting ? (
+                        <p className="flex items-center gap-2 text-sm text-brand-700">
+                          <span
+                            aria-hidden
+                            className="h-3 w-3 animate-spin rounded-full border-2 border-brand-600 border-t-transparent"
+                          />
+                          Menunggu konfirmasi dari Telegram...
+                        </p>
+                      ) : null}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               )}
 
@@ -137,6 +207,7 @@ export default function SettingsPage() {
                       void run(async () => {
                         await telegramService.unlink();
                         setPairing(null);
+                        setWaiting(false);
                         return "Koneksi Telegram dilepas.";
                       })
                     }
@@ -150,11 +221,14 @@ export default function SettingsPage() {
                       void run(async () => {
                         const code = await telegramService.pairingCode();
                         setPairing(code);
-                        return "Kode pairing dibuat. Kirim ke bot sebelum kedaluwarsa.";
+                        setWaiting(false);
+                        return code.deep_link
+                          ? "Tekan tombol di bawah untuk membuka Telegram."
+                          : "Kode dibuat. Kirim ke bot sebelum kedaluwarsa.";
                       })
                     }
                   >
-                    Buat Kode Pairing
+                    {pairing ? "Buat Kode Baru" : "Hubungkan Telegram"}
                   </Button>
                 )}
               </div>

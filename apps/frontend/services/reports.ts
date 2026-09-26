@@ -3,6 +3,7 @@ import { authStorage } from "@/lib/auth-storage";
 import type {
   ApiEnvelope,
   CashFlowReport,
+  DailyCashFlowReport,
   DashboardRange,
   DashboardSummary,
   ExpenseByCategoryRow,
@@ -58,6 +59,14 @@ async function download(path: string, filters: ReportFilters): Promise<{ blob: B
 }
 
 export const reportService = {
+  // The accounts-based daily report: the same payload the Telegram bot renders.
+  async dailyCashFlow(date?: string): Promise<DailyCashFlowReport> {
+    const { data } = await apiClient.get<ApiEnvelope<DailyCashFlowReport>>(
+      `/reports/daily-cash-flow${toQuery({ date })}`,
+    );
+    return unwrap(data);
+  },
+
   async dashboard(range: DashboardRange, custom?: { date_from: string; date_to: string }): Promise<DashboardSummary> {
     const query = range === "custom" && custom ? { range, ...custom } : { range };
     const { data } = await apiClient.get<ApiEnvelope<DashboardSummary>>(

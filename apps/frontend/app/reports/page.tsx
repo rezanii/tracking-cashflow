@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { DailyReport } from "@/components/daily-report";
 import { AppShell } from "@/components/layout/app-shell";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -17,7 +18,13 @@ import type { CashFlowReport, CashFlowRow, ReportFilters } from "@/types";
 
 type ExportKind = "excel" | "pdf";
 
+// The two reports answer different questions, so they sit side by side rather than in separate
+// menus: one is a flat ledger with a running balance, the other is the accounts-based daily
+// reconciliation the Telegram bot sends.
+type Tab = "cash-flow" | "daily";
+
 export default function ReportsPage() {
+  const [tab, setTab] = useState<Tab>("cash-flow");
   const [applied, setApplied] = useState<ReportFilters | null>(null);
   const [report, setReport] = useState<CashFlowReport | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -118,11 +125,42 @@ export default function ReportsPage() {
     },
   ];
 
+  const tabs: { id: Tab; label: string; hint: string }[] = [
+    { id: "cash-flow", label: "Arus Kas", hint: "Tabel per transaksi dengan saldo berjalan, bisa diekspor" },
+    { id: "daily", label: "Harian", hint: "Rekonsiliasi per akun, sama dengan yang dikirim bot" },
+  ];
+
   return (
     <AppShell>
       <div className="space-y-5">
-        <p className="text-sm text-slate-500">Buat laporan arus kas, tampilkan, lalu ekspor ke Excel atau PDF</p>
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-1" role="tablist">
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              onClick={() => setTab(item.id)}
+              className={
+                tab === item.id
+                  ? "rounded-t-lg border-b-2 border-brand-600 px-4 py-2 text-sm font-medium text-brand-700"
+                  : "rounded-t-lg border-b-2 border-transparent px-4 py-2 text-sm text-slate-600 hover:text-slate-900"
+              }
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
 
+        <p className="text-sm text-slate-500">{tabs.find((item) => item.id === tab)?.hint}</p>
+      </div>
+
+      {tab === "daily" ? (
+        <div className="mt-5">
+          <DailyReport />
+        </div>
+      ) : (
+      <div className="mt-5 space-y-5">
         <Card>
           <form className="space-y-4" onSubmit={form.handleSubmit(generate)} noValidate>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -237,6 +275,7 @@ export default function ReportsPage() {
           </Card>
         )}
       </div>
+      )}
     </AppShell>
   );
 }

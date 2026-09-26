@@ -56,6 +56,11 @@ export type Transaction = {
   amount: string;
   description: string;
   reference_number: string;
+  account_id: number | null;
+  account_name: string;
+  to_account_id: number | null;
+  to_account_name: string;
+  parent_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -133,6 +138,9 @@ export type TelegramPairingCode = {
   code: string;
   expires_at: string;
   instruction: string;
+  // Absent when the bot could not be reached; the UI then shows the code instead.
+  bot_username?: string;
+  deep_link?: string;
 };
 
 export type TelegramSendResult = {
@@ -163,4 +171,87 @@ export type BalanceSnapshot = {
   note: string;
   created_at: string;
   updated_at: string;
+};
+
+// --- Daily cash flow report -------------------------------------------------
+// Mirrors dto.DailyCashFlowReport. Money is a string so the exact decimal survives JSON.
+
+export type AmountLine = {
+  label: string;
+  amount: string;
+};
+
+export type WalletItem = {
+  label: string;
+  amount: string;
+  sub_items: AmountLine[];
+};
+
+export type WalletSection = {
+  account_id: number;
+  name: string;
+  allotment: string;
+  items: WalletItem[];
+  recorded_total: string;
+  expected_remaining: string;
+  has_actual_balance: boolean;
+  actual_balance: string;
+  variance: string;
+};
+
+export type BankSection = {
+  account_id: number;
+  name: string;
+  money_in: string;
+  fees: string;
+  money_out: string;
+  computed: string;
+  has_actual_balance: boolean;
+  actual_balance: string;
+  previous_balance: string;
+};
+
+export type CreditCardSection = {
+  account_id: number;
+  name: string;
+  payments: string;
+  taken_back: string;
+  net: string;
+};
+
+export type TopUpSection = {
+  total: string;
+  allocations: AmountLine[];
+  allocation_total: string;
+  balanced: boolean;
+};
+
+export type ReconciliationSection = {
+  top_up_total: string;
+  parts: AmountLine[];
+  parts_total: string;
+  difference: string;
+  balanced: boolean;
+};
+
+export type StatusLine = {
+  icon: string;
+  label: string;
+  amount: string;
+};
+
+export type DailyCashFlowReport = {
+  date: string;
+  period_label: string;
+  date_label: string;
+  opening_balance_label: string;
+  opening_balance: string;
+  cash_flow_expenses: AmountLine[];
+  cash_flow_total: string;
+  credit_cards: CreditCardSection[];
+  top_up: TopUpSection;
+  wallets: WalletSection[];
+  banks: BankSection[];
+  reconciliation: ReconciliationSection;
+  status: StatusLine[];
 };

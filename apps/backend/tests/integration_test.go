@@ -1,4 +1,4 @@
-// Package tests holds API level integration tests. They run against a real SQL Server,
+// Package tests holds API level integration tests. They run against a real Postgres,
 // driving the router exactly as HTTP clients do.
 //
 // The suite skips itself when no database is reachable, so "go test ./..." stays green on a
@@ -343,7 +343,7 @@ func TestTransactionCRUD(t *testing.T) {
 			Date         string `json:"transaction_date"`
 		}
 		mustUnmarshal(t, body.Data, &transaction)
-		// The exact decimal must survive the round trip through SQL Server and JSON.
+		// The exact decimal must survive the round trip through Postgres and JSON.
 		if transaction.Amount != "125000.5" && transaction.Amount != "125000.50" {
 			t.Fatalf("amount = %q, want 125000.50", transaction.Amount)
 		}

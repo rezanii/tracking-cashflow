@@ -95,7 +95,7 @@ func (r *dailyReportRepository) CashFlowExpenses(ctx context.Context, userID int
 	// Ordering by the first row of each category reproduces the order the day was written
 	// down in, which is the order a person reads the list back in.
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT COALESCE(c.name, N'Lain-lain') AS label, SUM(t.amount) AS amount
+		SELECT COALESCE(c.name, 'Lain-lain') AS label, SUM(t.amount) AS amount
 		FROM transactions AS t
 		LEFT JOIN categories AS c ON c.id = t.category_id
 		LEFT JOIN accounts   AS a ON a.id = t.account_id
@@ -104,7 +104,7 @@ func (r *dailyReportRepository) CashFlowExpenses(ctx context.Context, userID int
 		  AND t.transaction_type = 'EXPENSE'
 		  AND t.parent_id IS NULL
 		  AND `+cashFlowScope+`
-		GROUP BY COALESCE(c.name, N'Lain-lain')
+		GROUP BY COALESCE(c.name, 'Lain-lain')
 		ORDER BY MIN(t.id)`,
 		userID, date.Format("2006-01-02"),
 	).Scan(&rows).Error

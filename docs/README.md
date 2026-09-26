@@ -3,17 +3,17 @@
 Personal finance tracking: transactions, categories, a dashboard and cash flow reports with
 Excel and PDF export.
 
-Monorepo with a Go API, a Next.js frontend and SQL Server.
+Monorepo with a Go API, a Next.js frontend and PostgreSQL.
 
 - Backend: Go 1.25, chi, GORM, JWT, bcrypt, golang-migrate, excelize, fpdf, Swagger
 - Frontend: Next.js 15 App Router, TypeScript, Tailwind CSS, React Hook Form, Zod, Recharts
-- Database: SQL Server 2022, `snake_case`, `DECIMAL(18,2)` for money
+- Database: PostgreSQL 17, `snake_case`, `DECIMAL(18,2)` for money
 
 ## 1. Architecture overview
 
 ```
-┌──────────────┐        HTTPS/JSON        ┌──────────────┐       TDS       ┌────────────┐
-│  Next.js     │ ───────────────────────► │   Go / chi   │ ──────────────► │ SQL Server │
+┌──────────────┐        HTTPS/JSON        ┌──────────────┐    Postgres wire  ┌────────────┐
+│  Next.js     │ ───────────────────────► │   Go / chi   │ ──────────────► │  Postgres  │
 │  App Router  │  Bearer <access_token>   │   REST API   │      GORM       │    2022    │
 └──────────────┘                          └──────────────┘                 └────────────┘
 ```
@@ -24,7 +24,7 @@ the only component holding database credentials.
 Request flow:
 
 ```
-Router → Middleware → Handler → Service → Repository → GORM → SQL Server
+Router → Middleware → Handler → Service → Repository → GORM → Postgres
 ```
 
 - Handlers parse, validate, delegate and respond. No business logic, no SQL.
@@ -67,7 +67,7 @@ tracking-cashflow/
 │   │   ├── tests/              API integration tests
 │   │   └── Dockerfile
 │   └── frontend/
-│       ├── app/                login, dashboard, transactions, categories, reports, settings
+│       ├── app/                login, dashboard, transactions, categories, accounts, reports, settings
 │       ├── components/         ui primitives, layout shell, charts, transaction form
 │       ├── hooks/              auth context, async loader
 │       ├── lib/                api client, auth storage, formatters
@@ -103,23 +103,23 @@ erDiagram
 
     users {
         bigint id PK
-        nvarchar name
-        nvarchar email UK
-        nvarchar password_hash
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar name
+        varchar email UK
+        varchar password_hash
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     categories {
         bigint id PK
         bigint user_id FK
-        nvarchar name
+        varchar name
         varchar type "INCOME | EXPENSE"
-        nvarchar description
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar description
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     transactions {
@@ -129,25 +129,25 @@ erDiagram
         varchar transaction_type "INCOME | EXPENSE | TRANSFER"
         bigint category_id FK "null for TRANSFER"
         decimal amount "DECIMAL(18,2)"
-        nvarchar description
-        nvarchar reference_number
+        varchar description
+        varchar reference_number
         bigint account_id FK "where the money moved"
         bigint to_account_id FK "TRANSFER destination only"
         bigint parent_id FK "makes this row a detail line"
-        datetime2 created_at
-        datetime2 updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     accounts {
         bigint id PK
         bigint user_id FK
-        nvarchar name UK "unique per user"
+        varchar name UK "unique per user"
         varchar account_type "CASH_FLOW | WALLET | BANK | CREDIT_CARD | SAVINGS"
         decimal opening_balance "DECIMAL(18,2)"
-        nvarchar description
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar description
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     account_balance_snapshots {
@@ -156,33 +156,33 @@ erDiagram
         bigint account_id FK
         date as_of_date "unique with account_id"
         decimal actual_balance "observed, not derived"
-        nvarchar note
-        datetime2 created_at
-        datetime2 updated_at
+        varchar note
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     telegram_links {
         bigint id PK
         bigint user_id FK "unique"
         bigint chat_id UK "unique"
-        nvarchar username
-        nvarchar chat_title
-        datetime2 linked_at
-        datetime2 created_at
-        datetime2 updated_at
+        varchar username
+        varchar chat_title
+        timestamptz linked_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     telegram_pairing_codes {
         bigint id PK
         bigint user_id FK
         varchar code UK
-        datetime2 expires_at
-        datetime2 used_at "null until spent"
-        datetime2 created_at
+        timestamptz expires_at
+        timestamptz used_at "null until spent"
+        timestamptz created_at
     }
 ```
 
-Six tables. `accounts` and `account_balance_snapshots` exist for the daily report (§13):
+Seven tables. `accounts` and `account_balance_snapshots` exist for the daily report (§13):
 an account is where money sits, and a snapshot is what it *actually* held on a day, which
 cannot be derived from the transactions. `transactions.parent_id` breaks one recorded amount
 into what it became.
@@ -223,7 +223,7 @@ Base URL `/api/v1`. Swagger UI at `/swagger/index.html` — 26 paths, 41 definit
 | GET | `/reports/cash-flow/pdf` | yes | `.pdf` download |
 | GET | `/reports/expense-by-category` | yes | totals grouped by category |
 | GET | `/reports/monthly` | yes | one row per month |
-| GET | `/reports/daily-cash-flow` | yes | the full daily report as JSON (see §13) |
+| GET | `/reports/daily-cash-flow` | yes | the full daily report as JSON, and the Laporan → Harian tab (see §13) |
 | GET | `/accounts` | yes | list, with `account_type`, `is_active`, `search`, paging, sorting |
 | POST | `/accounts` | yes | create |
 | GET | `/accounts/{id}` | yes | detail |
@@ -260,8 +260,9 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose starts SQL Server, waits until it answers a query, runs the migrations and the seed
-in a one-shot `migrate` service, then starts the API and the frontend.
+Compose starts Postgres, waits until `pg_isready` reports it is accepting connections, runs
+the migrations and the seed in a one-shot `migrate` service, then starts the API and the
+frontend.
 
 - Frontend: http://localhost:3000 (`FRONTEND_HOST_PORT`)
 - API: http://localhost:8080/api/v1 (`APP_HOST_PORT`)
@@ -282,27 +283,46 @@ make docker-reset  # stop and delete the database volume
 
 ### Option B: run on the host
 
-SQL Server still comes from Docker; the apps run locally.
+Postgres comes from Docker; the apps run locally.
 
 ```bash
 cp .env.example .env
-docker compose up -d sqlserver
+docker compose up -d postgres
 make migrate   # creates the database if it does not exist, then applies the schema
 make seed      # development user, categories and a month of transactions
 make run       # API on APP_PORT
 make run-frontend   # Next.js dev server on 3000
 ```
 
+### Using a Postgres you already have
+
+The bundled `postgres` service is the default so a clean machine needs nothing else. To point
+at a Postgres running on your host instead, or at a hosted one, set the two container-side
+variables — a container cannot reach the host as `localhost`:
+
+```dotenv
+DB_HOST=localhost                  # the backend run on the host (Option B)
+DB_HOST_DOCKER=host.docker.internal  # the same database, seen from a container
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_SSLMODE=disable
+```
+
+The bundled service still starts and simply goes unused; `docker compose stop postgres` if you
+would rather not run it. For a hosted database set `DB_HOST_DOCKER` to its host and
+`DB_SSLMODE=require`.
+
 ### Ports
 
 Every published port is an environment variable, because the defaults collide with things
-that are commonly already running (a local SQL Server on 1433, Jenkins on 8080, Grafana on
-3000). Inside the compose network the ports are fixed — SQL Server is always 1433 and the
-API always 8080 — so only the host side changes.
+that are commonly already running (a local Postgres on 5432, Jenkins on 8080, Grafana on
+3000). Inside the compose network the ports are fixed — the bundled Postgres is always 5432
+and the API always 8080 — so only the host side changes.
 
 | Variable | Default | What it publishes |
 | --- | --- | --- |
-| `SQLSERVER_HOST_PORT` | 1433 | SQL Server |
+| `POSTGRES_HOST_PORT` | 5432 | the bundled Postgres |
 | `APP_HOST_PORT` | 8080 | the API |
 | `FRONTEND_HOST_PORT` | 3000 | the web app |
 
@@ -314,13 +334,13 @@ stack as seen from the browser rather than from inside the network:
   a restart.
 - `CORS_ALLOWED_ORIGINS` must contain `http://localhost:<FRONTEND_HOST_PORT>`.
 
-`DB_PORT` is only read when the backend runs on the host (Option B); in compose it is
-always 1433. The set this project was verified with, on a machine where 1433, 8080 and
-3000 were all taken:
+`DB_PORT` is what the backend dials; `POSTGRES_HOST_PORT` is only where the bundled container
+is published. The set this project was verified with, on a machine where 5432 was held by a
+local Postgres and 8080 and 3000 were taken:
 
 ```dotenv
-SQLSERVER_HOST_PORT=14330
-DB_PORT=14330
+POSTGRES_HOST_PORT=54320
+DB_PORT=5432
 APP_HOST_PORT=8090
 FRONTEND_HOST_PORT=3100
 NEXT_PUBLIC_API_URL=http://localhost:8090/api/v1
@@ -350,10 +370,7 @@ Migrations live in `apps/backend/migrations` as plain SQL pairs:
 000006_create_telegram_links.up.sql      / .down.sql
 ```
 
-`000005` adds columns and then constrains them, which SQL Server cannot do in one batch
-because it compiles the batch as a whole. The statements after the `ALTER TABLE ADD` are
-wrapped in `EXEC(N'...')` to force a fresh compilation scope. Every `down` is reversible and
-the 4-to-6 round trip is exercised, not assumed.
+Every `down` is reversible and the 4-to-6 round trip is exercised, not assumed.
 
 `make sync-db-docs` copies them into `database/migrations` for DBA review.
 
@@ -372,7 +389,7 @@ daily report's worked example is asserted figure by figure, and one test walks t
 Telegram message asserting no MarkdownV2 special character is left unescaped — Telegram
 rejects the whole message otherwise, so this is the check that keeps the bot working.
 
-Integration tests in `apps/backend/tests` drive the real router against SQL Server:
+Integration tests in `apps/backend/tests` drive the real router against Postgres:
 register, login, token rejection, transaction CRUD, ownership, filtering, paging, category
 lifecycle, every report, both exports, account lifecycle and ownership, observed balances,
 transfer validation, the Telegram pairing endpoints, and the full daily report end to end. They **skip** themselves when no database is
@@ -526,7 +543,7 @@ the same table, repeating the header on every page.
 5. **Recurring transactions**, since a mortgage or a salary is the same row every month.
 6. **Multi-currency**, which needs a rate table and a decision about which currency the
    totals report in.
-7. **CI**: run `make lint` and `make test` on every push, with SQL Server as a service
+7. **CI**: run `make lint` and `make test` on every push, with Postgres as a service
    container so the integration tests run there too.
 8. **Attachment upload** for receipts, kept out of the database itself.
 9. **Scheduled delivery** of the daily report, with the send time set per user.
@@ -580,17 +597,61 @@ TELEGRAM_BOT_TOKEN=<token from BotFather>
 #    INFO telegram poller started
 ```
 
-Then connect a chat. Open **Pengaturan** in the web app, press **Buat Kode Pairing**, and send
-`/start <code>` to the bot — or do the same over the API:
+Then connect a chat. Open **Pengaturan** in the web app and press **Hubungkan Telegram**: the
+page hands back a link that opens the chat and sends the pairing command for you, so nothing is
+typed. The page then watches for the link appearing and flips to *Terhubung* on its own.
+
+Over the API the same response carries the link:
 
 ```bash
 curl -s -X POST "$API/telegram/pairing-code" -H "Authorization: Bearer $TOKEN"
-# {"data":{"code":"YNR4JBLH","instruction":"Kirim pesan \"/start YNR4JBLH\" ke bot Telegram"}}
+# {"data":{
+#   "code":"3HK5QUXK",
+#   "bot_username":"rezanibot",
+#   "deep_link":"https://t.me/rezanibot?start=3HK5QUXK",
+#   "instruction":"Buka t.me/rezanibot lalu tekan START, atau kirim \"/start 3HK5QUXK\""
+# }}
 ```
+
+`deep_link` is Telegram's own mechanism: opening it sends `/start <code>` as the first message,
+which is exactly what the bot already handles — one code path, whether it was tapped or typed.
+The code stays in the response as a fallback for a machine that cannot open the link, and
+`deep_link` is absent when the bot token could not be reached, in which case the UI shows the
+code instead of a dead button.
 
 A chat id proves nothing — anyone can find a bot and message it — so the bot answers an
 unlinked chat with nothing but "not linked". The code is single-use, short-lived, and comes
 from `crypto/rand`.
+
+### The same report on the web
+
+`/reports` has two tabs, because the two reports answer different questions and putting them
+side by side makes the difference visible instead of hiding it in separate menus:
+
+| Tab | Endpoint | Answers |
+| --- | --- | --- |
+| **Arus Kas** | `/reports/cash-flow` | a flat ledger per transaction with a running balance, exportable to Excel and PDF |
+| **Harian** | `/reports/daily-cash-flow` | the accounts-based reconciliation — the same payload the bot renders |
+
+The totals differ on purpose. The flat report sums every expense of the day, including the card
+bill and each wallet item; the daily report separates them by account role, nets the card bill
+against the money taken back off it, and counts a parent once rather than adding its detail
+lines on top.
+
+### Recording from the web
+
+Everything the bot can write, the web can write too — the same endpoints, so neither is the
+privileged path:
+
+| Page | Writes |
+| --- | --- |
+| **Akun** | create, edit, activate and delete accounts, and record the balance an account actually holds on a day |
+| **Transaksi** | the form now carries the source account, the destination account for a transfer, and an optional parent id that makes the row a detail line |
+| **Laporan → Harian** | shows the report and sends it to Telegram on demand |
+| **Pengaturan** | pairing in one tap via a Telegram deep link, and unpairing |
+
+An account with no recorded balance stops the report at the expected remainder rather than
+inventing a variance, and the wallet section says so in words with a pointer to the Akun page.
 
 ### Commands
 
@@ -706,3 +767,135 @@ returns the full report. Every figure in it — `850.000`, `500.000`, `100.000`,
 `12.500`, `7.500`, and a reconciliation difference of `0` — is computed, not stored. Only the
 opening balance differs from the sample above, because it is derived from whatever history the
 seed left behind.
+
+## 14. Deploying
+
+The frontend and the backend do not belong on the same kind of host, and that is the decision
+that shapes everything else.
+
+**Vercel and Netlify are serverless.** They are excellent for the Next.js frontend and cannot
+run this Go backend as it stands, for one concrete reason: the Telegram poller is a goroutine
+holding a long poll open for the life of the process, and serverless has no such life. The
+backend wants a host that runs a container.
+
+### Recommended shape
+
+```
+Vercel / Netlify          Render / Railway / Fly        Neon / Supabase
+┌──────────────┐          ┌──────────────────┐          ┌────────────┐
+│  Next.js     │ ───────► │   Go / chi       │ ───────► │  Postgres  │
+│  (static +   │  HTTPS   │   (container,    │   TLS    │  (managed) │
+│   SSR)       │          │    always on)    │          └────────────┘
+└──────────────┘          └──────────────────┘
+```
+
+Nothing in the code changes for this. The backend `Dockerfile` is what Render and Railway
+build, and the poller keeps working because the process keeps running.
+
+### 1. Database
+
+Create a Postgres and copy its connection details. Any managed Postgres works; the free tiers
+worth knowing about are [Neon](https://neon.com) (scale-to-zero, which means an occasional
+cold start) and [Supabase](https://supabase.com) (pauses after about a week idle).
+
+```dotenv
+DB_HOST=<host from the provider>
+DB_PORT=5432
+DB_USER=<user>
+DB_PASSWORD=<password>
+DB_NAME=<database>
+DB_SSLMODE=require
+```
+
+`DB_SSLMODE=require` is not optional in production — the config refuses to start with
+`disable` or `allow` when `APP_ENV=production`, because sending credentials in the clear to a
+database across the internet is not something to fall back to silently.
+
+If the provider sits behind a connection pooler (Supabase's Supavisor, Neon's proxy), use the
+**pooled** connection string and consider lowering `pool.SetMaxOpenConns` in
+`internal/repository/db.go` from 25.
+
+### 2. Migrations
+
+The migrator is a separate binary in the same image, so run it as a release command rather
+than at boot:
+
+```bash
+/app/migrate -command up
+```
+
+On Render that is a *Pre-Deploy Command*; on Railway a *Deploy* step. It is idempotent, so
+running it on every deploy is fine. `-command drop` refuses to run when `APP_ENV=production`.
+
+Do **not** run `/app/seed` in production — it refuses anyway, because it writes a known
+password.
+
+### 3. Backend
+
+Point the platform at `apps/backend/Dockerfile`. It already runs as non-root and carries its
+own healthcheck, which probes `/health` through the binary because the image has no curl.
+
+```dotenv
+APP_ENV=production
+APP_PORT=8080          # or whatever the platform injects as $PORT
+JWT_SECRET=<32+ random characters>
+CORS_ALLOWED_ORIGINS=https://<your-frontend-domain>
+```
+
+`JWT_SECRET` shorter than 32 characters is refused in production. `CORS_ALLOWED_ORIGINS` has
+to name the real frontend origin: with the default `http://localhost:3000` the deployed
+frontend's requests are rejected by the browser.
+
+### 4. Frontend
+
+Deploy `apps/frontend` to Vercel or Netlify with one build-time variable:
+
+```dotenv
+NEXT_PUBLIC_API_URL=https://<your-backend-domain>/api/v1
+```
+
+Next.js inlines `NEXT_PUBLIC_*` into the bundle, so this is **baked at build time**. Changing
+it needs a rebuild, not a restart — a redeploy with the variable edited.
+
+### 5. Telegram
+
+A deployed backend has a public HTTPS URL, which is exactly what webhook mode wants. Prefer it
+over polling in production: it costs nothing while idle and survives a platform restarting the
+container.
+
+```dotenv
+TELEGRAM_MODE=webhook
+TELEGRAM_BOT_TOKEN=<token>
+TELEGRAM_WEBHOOK_URL=https://<your-backend-domain>/api/v1/telegram/webhook
+TELEGRAM_WEBHOOK_SECRET=<long random value>
+```
+
+Startup registers the webhook itself, so there is no `setWebhook` call to make by hand. The
+secret is compared in constant time against the header Telegram sends; with no secret set the
+endpoint returns 404 rather than sitting open.
+
+Keep one consumer per bot token. Two pollers, or a poller and a webhook, on the same token
+fight each other — see [§13](#13-daily-cash-flow-report-and-telegram).
+
+### If you must put the backend on Vercel
+
+It can be done, with two changes you should make deliberately rather than discover:
+
+1. **Switch to `TELEGRAM_MODE=webhook`.** The poller cannot run; a serverless function that
+   tried would be killed mid-poll.
+2. **Use a pooled connection string.** Every invocation opens its own connection, and a
+   direct connection per request exhausts a free-tier Postgres quickly.
+
+You would also need a Vercel entrypoint under `api/` that mounts the chi router. That file is
+not in this repo, because the recommended shape above does not need it.
+
+### Checklist before the first deploy
+
+- [ ] `DB_SSLMODE=require`
+- [ ] `JWT_SECRET` at least 32 random characters, not the development value
+- [ ] `CORS_ALLOWED_ORIGINS` is the real frontend origin
+- [ ] `NEXT_PUBLIC_API_URL` is the real backend origin, and the frontend was **rebuilt** after
+      setting it
+- [ ] migrations run as a release command, seed not run
+- [ ] `TELEGRAM_MODE=webhook` with a secret, or `off`
+- [ ] the seeded `admin@example.com` account does not exist in the production database

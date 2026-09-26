@@ -44,12 +44,55 @@ export const transactionSchema = z
     amount: amountSchema,
     description: z.string().max(500, "Deskripsi maksimal 500 karakter").optional(),
     reference_number: z.string().max(100, "Nomor referensi maksimal 100 karakter").optional(),
+    account_id: z.string().optional(),
+    to_account_id: z.string().optional(),
+    parent_id: z.string().optional(),
   })
-  // The API enforces this too; checking here means the user sees it before a round trip.
+  // The API enforces all of these too; checking here means the user sees it before a round trip.
   .refine(
     (value) => value.transaction_type === "TRANSFER" || (value.category_id ?? "") !== "",
     { message: "Kategori wajib dipilih untuk pemasukan dan pengeluaran", path: ["category_id"] },
+  )
+  .refine(
+    (value) => value.transaction_type === "TRANSFER" || (value.to_account_id ?? "") === "",
+    { message: "Akun tujuan hanya berlaku untuk transfer", path: ["to_account_id"] },
+  )
+  .refine(
+    (value) => value.transaction_type !== "TRANSFER" || (value.account_id ?? "") !== "",
+    { message: "Akun sumber wajib dipilih untuk transfer", path: ["account_id"] },
+  )
+  .refine(
+    (value) => value.transaction_type !== "TRANSFER" || (value.to_account_id ?? "") !== "",
+    { message: "Akun tujuan wajib dipilih untuk transfer", path: ["to_account_id"] },
+  )
+  .refine(
+    (value) => (value.to_account_id ?? "") === "" || value.to_account_id !== value.account_id,
+    { message: "Akun tujuan harus berbeda dari akun sumber", path: ["to_account_id"] },
   );
+
+export const accountSchema = z.object({
+  name: z.string().min(2, "Nama minimal 2 karakter").max(100, "Nama maksimal 100 karakter"),
+  account_type: z.enum(["CASH_FLOW", "WALLET", "BANK", "CREDIT_CARD", "SAVINGS"], {
+    message: "Tipe akun wajib dipilih",
+  }),
+  opening_balance: z
+    .string()
+    .optional()
+    .refine((value) => (value ?? "") === "" || /^\d+([.,]\d{1,2})?$/.test(value ?? ""), {
+      message: "Saldo awal harus berupa angka",
+    }),
+  description: z.string().max(255, "Deskripsi maksimal 255 karakter").optional(),
+});
+
+export const balanceSnapshotSchema = z.object({
+  as_of_date: dateSchema,
+  // A counted balance may legitimately be zero, so this is not the amount schema.
+  actual_balance: z
+    .string()
+    .min(1, "Saldo wajib diisi")
+    .regex(/^\d+([.,]\d{1,2})?$/, "Saldo harus berupa angka tanpa tanda minus"),
+  note: z.string().max(255, "Catatan maksimal 255 karakter").optional(),
+});
 
 export const categorySchema = z.object({
   name: z.string().min(2, "Nama minimal 2 karakter").max(100, "Nama maksimal 100 karakter"),
@@ -74,3 +117,5 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type TransactionInput = z.infer<typeof transactionSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type ReportFilterInput = z.infer<typeof reportFilterSchema>;
+export type AccountInput = z.infer<typeof accountSchema>;
+export type BalanceSnapshotInput = z.infer<typeof balanceSnapshotSchema>;

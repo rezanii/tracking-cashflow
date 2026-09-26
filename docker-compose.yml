@@ -1,28 +1,26 @@
 services:
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: tracking-cashflow-sqlserver
+  postgres:
+    image: postgres:17-alpine
+    container_name: tracking-cashflow-postgres
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
-      MSSQL_PID: Developer
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      # The app database is created by the migrator, which also handles a hosted Postgres
+      # where CREATE DATABASE is not ours to run at startup.
+      POSTGRES_DB: postgres
     ports:
-      # Published on SQLSERVER_HOST_PORT so a SQL Server already installed on the host
-      # can keep 1433. Inside the network the port is always 1433.
-      - "${SQLSERVER_HOST_PORT:-1433}:1433"
+      # Published on POSTGRES_HOST_PORT so a Postgres already installed on the host can keep
+      # 5432. Inside the network the port is always 5432.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      - sqlserver-data:/var/opt/mssql
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      # The container is only useful once it answers a query, not merely once the port opens.
-      test:
-        [
-          "CMD-SHELL",
-          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1'",
-        ]
+      # pg_isready reports the server is accepting connections, not merely that the port opened.
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 40s
+      start_period: 15s
     restart: unless-stopped
 
   # Creates the database, applies the schema and loads development data, then exits.
@@ -35,14 +33,19 @@ services:
     container_name: tracking-cashflow-migrate
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DB_HOST: sqlserver
-      DB_PORT: 1433
+      # Defaults to the bundled service. Set DB_HOST_DOCKER to host.docker.internal to use a
+      # Postgres running on the host, or to a hosted one (Neon, Supabase, Render).
+      DB_HOST: ${DB_HOST_DOCKER:-postgres}
+      DB_PORT: ${DB_PORT_DOCKER:-5432}
+      DB_SSLMODE: disable
       DB_USER: ${DB_USER:-sa}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:-financial_management}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      sqlserver:
+      postgres:
         condition: service_healthy
     entrypoint: ["/app/entrypoint.sh"]
     restart: "no"
@@ -55,8 +58,11 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_PORT: 8080
-      DB_HOST: sqlserver
-      DB_PORT: 1433
+      # Defaults to the bundled service. Set DB_HOST_DOCKER to host.docker.internal to use a
+      # Postgres running on the host, or to a hosted one (Neon, Supabase, Render).
+      DB_HOST: ${DB_HOST_DOCKER:-postgres}
+      DB_PORT: ${DB_PORT_DOCKER:-5432}
+      DB_SSLMODE: disable
       DB_USER: ${DB_USER:-sa}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:-financial_management}
@@ -72,8 +78,10 @@ services:
     ports:
       # Published on APP_HOST_PORT so a port already in use on the host can be avoided.
       - "${APP_HOST_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      sqlserver:
+      postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -104,4 +112,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  sqlserver-data:
+  postgres-data:

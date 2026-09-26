@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/dto"
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/model"
@@ -160,7 +161,7 @@ func (r *accountRepository) ListByType(ctx context.Context, userID int64, types 
 	}
 	var accounts []model.Account
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND is_active = 1 AND account_type IN ?", userID, types).
+		Where("user_id = ? AND is_active = TRUE AND account_type IN ?", userID, types).
 		Order("account_type ASC").
 		Order("name ASC").
 		Find(&accounts).Error
@@ -185,7 +186,7 @@ func (r *accountRepository) SetActive(ctx context.Context, userID, id int64, isA
 	result := r.db.WithContext(ctx).
 		Model(&model.Account{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Updates(map[string]any{"is_active": isActive, "updated_at": gorm.Expr("SYSUTCDATETIME()")})
+		Updates(map[string]any{"is_active": isActive, "updated_at": gorm.Expr("NOW()")})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -202,7 +203,7 @@ func (r *accountRepository) SumOpeningBalance(ctx context.Context, userID int64,
 	query := r.db.WithContext(ctx).
 		Model(&model.Account{}).
 		Select("COALESCE(SUM(opening_balance), 0) AS value").
-		Where("user_id = ? AND is_active = 1", userID)
+		Where("user_id = ? AND is_active = TRUE", userID)
 	if len(types) > 0 {
 		query = query.Where("account_type IN ?", types)
 	}
@@ -213,33 +214,17 @@ func (r *accountRepository) SumOpeningBalance(ctx context.Context, userID int64,
 }
 
 // UpsertSnapshot keeps one observed balance per account per day: re-counting a wallet
-// corrects the figure instead of adding a second, contradictory row.
-//
-// This is an explicit update-then-insert rather than clause.OnConflict, because GORM's
-// SQL Server driver ignores that clause and emits a plain INSERT, which the unique index
-// then rejects.
+// corrects the figure instead of adding a second, contradictory row. The unique index on
+// (account_id, as_of_date) is what the conflict target refers to, so the check and the write
+// are one statement and two concurrent writes cannot both insert.
 func (r *accountRepository) UpsertSnapshot(ctx context.Context, snapshot *model.AccountBalanceSnapshot) error {
-	day := snapshot.AsOfDate.Format("2006-01-02")
-
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&model.AccountBalanceSnapshot{}).
-			Where("user_id = ? AND account_id = ? AND as_of_date = ?", snapshot.UserID, snapshot.AccountID, day).
-			Updates(map[string]any{
-				"actual_balance": snapshot.ActualBalance,
-				"note":           snapshot.Note,
-				"updated_at":     snapshot.UpdatedAt,
-			})
-		if result.Error != nil {
-			return result.Error
-		}
-
-		if result.RowsAffected > 0 {
-			// Read the row back so the caller gets the stored id rather than a zero value.
-			return tx.Where("user_id = ? AND account_id = ? AND as_of_date = ?", snapshot.UserID, snapshot.AccountID, day).
-				Take(snapshot).Error
-		}
-		return tx.Omit("Account").Create(snapshot).Error
-	})
+	return r.db.WithContext(ctx).
+		Omit("Account").
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "account_id"}, {Name: "as_of_date"}},
+			DoUpdates: clause.AssignmentColumns([]string{"actual_balance", "note", "updated_at"}),
+		}).
+		Create(snapshot).Error
 }
 
 func (r *accountRepository) ListSnapshots(ctx context.Context, userID, accountID int64, limit int) ([]model.AccountBalanceSnapshot, error) {

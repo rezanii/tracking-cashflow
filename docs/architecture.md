@@ -5,8 +5,8 @@
 Monorepo with two deployable apps and one database.
 
 ```
-┌──────────────┐        HTTPS/JSON        ┌──────────────┐       TDS       ┌────────────┐
-│  Next.js 15  │ ───────────────────────► │   Go / chi   │ ──────────────► │ SQL Server │
+┌──────────────┐        HTTPS/JSON        ┌──────────────┐    Postgres wire  ┌────────────┐
+│  Next.js 15  │ ───────────────────────► │   Go / chi   │ ──────────────► │  Postgres  │
 │  App Router  │  Bearer <access_token>   │   REST API   │      GORM       │    2022    │
 └──────────────┘                          └──────────────┘                 └────────────┘
 ```
@@ -24,7 +24,7 @@ HTTP Request
   → Handler         (decode, validate, map DTO, write response envelope)
   → Service         (business rules, money arithmetic, transaction orchestration)
   → Repository      (GORM queries, always scoped by user_id)
-  → SQL Server
+  → Postgres
 ```
 
 Rules enforced by this layering:
@@ -96,7 +96,7 @@ Backend:
 | `github.com/go-chi/chi/v5` | Router |
 | `github.com/go-chi/cors` | CORS |
 | `github.com/go-chi/httprate` | Rate limit on auth endpoints |
-| `gorm.io/gorm`, `gorm.io/driver/sqlserver` | ORM and SQL Server driver |
+| `gorm.io/gorm`, `gorm.io/driver/postgres` | ORM and Postgres driver |
 | `github.com/golang-jwt/jwt/v5` | JWT |
 | `golang.org/x/crypto/bcrypt` | Password hashing |
 | `github.com/go-playground/validator/v10` | Request validation |

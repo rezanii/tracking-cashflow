@@ -8,6 +8,12 @@ type TelegramPairingCodeResponse struct {
 	// Instruction is ready to show in the UI so the user does not have to be told the
 	// command format separately.
 	Instruction string `json:"instruction" example:"Send /start 7F3K9Q to the bot"`
+	// BotUsername is empty when the bot token could not be reached.
+	BotUsername string `json:"bot_username,omitempty" example:"rezanibot"`
+	// DeepLink opens the chat and sends "/start <code>" on a single tap, so nothing has to be
+	// typed. It is empty when the bot username is unknown, and the UI then falls back to
+	// showing the code.
+	DeepLink string `json:"deep_link,omitempty" example:"https://t.me/rezanibot?start=7F3K9Q"`
 }
 
 type TelegramLinkResponse struct {

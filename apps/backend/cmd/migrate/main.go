@@ -12,7 +12,7 @@ import (
 	"regexp"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlserver"
+	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"gorm.io/gorm"
 
@@ -41,7 +41,7 @@ func run(command string, steps, version int, path string) error {
 		return fmt.Errorf("load configuration: %w", err)
 	}
 
-	// A fresh SQL Server has no application database yet, and golang-migrate cannot create
+	// A fresh Postgres has no application database yet, and golang-migrate cannot create
 	// the database it is asked to connect to.
 	if err := ensureDatabase(cfg); err != nil {
 		return err
@@ -58,7 +58,7 @@ func run(command string, steps, version int, path string) error {
 		return fmt.Errorf("access connection pool: %w", err)
 	}
 
-	driver, err := sqlserver.WithInstance(pool, &sqlserver.Config{DatabaseName: cfg.DBName})
+	driver, err := migratepostgres.WithInstance(pool, &migratepostgres.Config{DatabaseName: cfg.DBName})
 	if err != nil {
 		return fmt.Errorf("prepare migration driver: %w", err)
 	}
@@ -139,32 +139,30 @@ func reportVersion(migrator *migrate.Migrate) error {
 	return nil
 }
 
-// ensureDatabase connects to master and creates the application database when it is absent.
+// ensureDatabase connects to the maintenance database and creates the application database
+// when it is absent.
 // CREATE DATABASE cannot be parameterised, so the name is validated against a strict pattern
-// and bracket-quoted rather than interpolated raw.
+// and double-quoted rather than interpolated raw.
 func ensureDatabase(cfg config.Config) error {
 	if !databaseNamePattern.MatchString(cfg.DBName) {
 		return fmt.Errorf("database name %q may only contain letters, digits and underscores", cfg.DBName)
 	}
 
-	masterCfg := cfg
-	masterCfg.DBName = "master"
-
-	db, err := repository.NewDatabase(masterCfg)
+	db, err := repository.NewMaintenanceDatabase(cfg)
 	if err != nil {
-		return fmt.Errorf("connect master: %w", err)
+		return fmt.Errorf("connect maintenance database: %w", err)
 	}
 	defer closePool(db)
 
 	var exists int
-	if err := db.Raw("SELECT COUNT(*) FROM sys.databases WHERE name = ?", cfg.DBName).Scan(&exists).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM pg_database WHERE datname = ?", cfg.DBName).Scan(&exists).Error; err != nil {
 		return fmt.Errorf("check database exists: %w", err)
 	}
 	if exists > 0 {
 		return nil
 	}
 
-	statement := fmt.Sprintf("CREATE DATABASE [%s]", cfg.DBName)
+	statement := fmt.Sprintf(`CREATE DATABASE "%s"`, cfg.DBName)
 	if err := db.Exec(statement).Error; err != nil {
 		return fmt.Errorf("create database %s: %w", cfg.DBName, err)
 	}

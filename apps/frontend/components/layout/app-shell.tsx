@@ -12,6 +12,7 @@ const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
   { href: "/transactions", label: "Transaksi", icon: "⇅" },
   { href: "/categories", label: "Kategori", icon: "☰" },
+  { href: "/accounts", label: "Akun", icon: "◈" },
   { href: "/reports", label: "Laporan", icon: "▤" },
   { href: "/settings", label: "Pengaturan", icon: "⚙" },
 ];

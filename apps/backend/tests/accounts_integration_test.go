@@ -233,7 +233,7 @@ func TestBalanceSnapshotOverwritesTheSameDay(t *testing.T) {
 	}
 }
 
-// The full worked example over HTTP against SQL Server: the SQL, the service maths and the
+// The full worked example over HTTP against Postgres: the SQL, the service maths and the
 // wiring all have to agree for these figures to come out.
 func TestDailyCashFlowReportOverHTTP(t *testing.T) {
 	h := newHarness(t)

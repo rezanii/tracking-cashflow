@@ -1,6 +1,6 @@
 # Database
 
-SQL Server 2022. All identifiers are `snake_case`.
+PostgreSQL 17. All identifiers are `snake_case`.
 
 ## ERD
 
@@ -19,23 +19,23 @@ erDiagram
 
     users {
         bigint id PK
-        nvarchar name
-        nvarchar email UK
-        nvarchar password_hash
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar name
+        varchar email UK
+        varchar password_hash
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     categories {
         bigint id PK
         bigint user_id FK
-        nvarchar name
+        varchar name
         varchar type "INCOME | EXPENSE"
-        nvarchar description
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar description
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     transactions {
@@ -45,25 +45,25 @@ erDiagram
         varchar transaction_type "INCOME | EXPENSE | TRANSFER"
         bigint category_id FK "null for TRANSFER"
         decimal amount "DECIMAL(18,2)"
-        nvarchar description
-        nvarchar reference_number
+        varchar description
+        varchar reference_number
         bigint account_id FK "where the money moved"
         bigint to_account_id FK "TRANSFER destination only"
         bigint parent_id FK "makes this row a detail line"
-        datetime2 created_at
-        datetime2 updated_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     accounts {
         bigint id PK
         bigint user_id FK
-        nvarchar name UK "unique per user"
+        varchar name UK "unique per user"
         varchar account_type "CASH_FLOW | WALLET | BANK | CREDIT_CARD | SAVINGS"
         decimal opening_balance "DECIMAL(18,2)"
-        nvarchar description
-        bit is_active
-        datetime2 created_at
-        datetime2 updated_at
+        varchar description
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     account_balance_snapshots {
@@ -72,29 +72,29 @@ erDiagram
         bigint account_id FK
         date as_of_date "unique with account_id"
         decimal actual_balance "observed, not derived"
-        nvarchar note
-        datetime2 created_at
-        datetime2 updated_at
+        varchar note
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     telegram_links {
         bigint id PK
         bigint user_id FK "unique"
         bigint chat_id UK "unique"
-        nvarchar username
-        nvarchar chat_title
-        datetime2 linked_at
-        datetime2 created_at
-        datetime2 updated_at
+        varchar username
+        varchar chat_title
+        timestamptz linked_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     telegram_pairing_codes {
         bigint id PK
         bigint user_id FK
         varchar code UK
-        datetime2 expires_at
-        datetime2 used_at "null until spent"
-        datetime2 created_at
+        timestamptz expires_at
+        timestamptz used_at "null until spent"
+        timestamptz created_at
     }
 ```
 
@@ -123,8 +123,9 @@ written down. Without this table the report can show an expected remainder but n
 variance.
 
 One row per account per day. Re-counting the same day corrects the figure rather than adding
-a second, contradictory row. GORM's `clause.OnConflict` is ignored by the SQL Server driver,
-so the repository does an explicit update-then-insert instead.
+a second, contradictory row. The unique index on `(account_id, as_of_date)` is the conflict
+target the repository's `ON CONFLICT … DO UPDATE` refers to, so the check and the write are one
+statement and two concurrent writes cannot both insert.
 
 ## Detail lines
 
@@ -140,41 +141,41 @@ ambiguous.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | `BIGINT IDENTITY(1,1)` | PK |
-| `name` | `NVARCHAR(150) NOT NULL` | |
-| `email` | `NVARCHAR(255) NOT NULL` | unique |
-| `password_hash` | `NVARCHAR(255) NOT NULL` | bcrypt, never returned by the API |
-| `is_active` | `BIT NOT NULL DEFAULT 1` | inactive users cannot log in |
-| `created_at` | `DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME()` | UTC |
-| `updated_at` | `DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME()` | UTC |
+| `id` | `BIGSERIAL` | PK |
+| `name` | `VARCHAR(150) NOT NULL` | |
+| `email` | `VARCHAR(255) NOT NULL` | unique |
+| `password_hash` | `VARCHAR(255) NOT NULL` | bcrypt, never returned by the API |
+| `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | inactive users cannot log in |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | UTC |
+| `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | UTC |
 
 ### categories
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | `BIGINT IDENTITY(1,1)` | PK |
+| `id` | `BIGSERIAL` | PK |
 | `user_id` | `BIGINT NOT NULL` | FK → `users(id)` |
-| `name` | `NVARCHAR(100) NOT NULL` | unique per user and type |
+| `name` | `VARCHAR(100) NOT NULL` | unique per user and type |
 | `type` | `VARCHAR(10) NOT NULL` | `INCOME` or `EXPENSE`, checked |
-| `description` | `NVARCHAR(255) NULL` | |
-| `is_active` | `BIT NOT NULL DEFAULT 1` | |
-| `created_at` | `DATETIME2(3) NOT NULL` | |
-| `updated_at` | `DATETIME2(3) NOT NULL` | |
+| `description` | `VARCHAR(255) NULL` | |
+| `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | |
+| `created_at` | `TIMESTAMPTZ NOT NULL` | |
+| `updated_at` | `TIMESTAMPTZ NOT NULL` | |
 
 ### transactions
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | `BIGINT IDENTITY(1,1)` | PK |
+| `id` | `BIGSERIAL` | PK |
 | `user_id` | `BIGINT NOT NULL` | FK → `users(id)` |
 | `transaction_date` | `DATE NOT NULL` | the accounting date, no time component |
 | `transaction_type` | `VARCHAR(10) NOT NULL` | `INCOME`, `EXPENSE` or `TRANSFER`, checked |
 | `category_id` | `BIGINT NULL` | FK → `categories(id)`; required for INCOME and EXPENSE, null for TRANSFER |
 | `amount` | `DECIMAL(18,2) NOT NULL` | always positive; the type carries the direction |
-| `description` | `NVARCHAR(500) NULL` | |
-| `reference_number` | `NVARCHAR(100) NULL` | |
-| `created_at` | `DATETIME2(3) NOT NULL` | |
-| `updated_at` | `DATETIME2(3) NOT NULL` | |
+| `description` | `VARCHAR(500) NULL` | |
+| `reference_number` | `VARCHAR(100) NULL` | |
+| `created_at` | `TIMESTAMPTZ NOT NULL` | |
+| `updated_at` | `TIMESTAMPTZ NOT NULL` | |
 
 ## Constraints
 

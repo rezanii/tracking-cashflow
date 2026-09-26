@@ -20,6 +20,7 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBName     string
+	DBSSLMode  string
 
 	JWTSecret     string
 	JWTExpiration time.Duration
@@ -65,17 +66,32 @@ func (c Config) IsProduction() bool {
 	return strings.EqualFold(c.AppEnv, "production")
 }
 
-// SQLServerDSN builds a TDS URL. Credentials are escaped so a password containing
+// PostgresDSN builds a connection URL. Credentials are escaped so a password containing
 // reserved characters cannot break or alter the connection string.
-func (c Config) SQLServerDSN() string {
+//
+// DatabaseName is a parameter so the migrator can reach the maintenance database without
+// building a second config by hand.
+func (c Config) PostgresDSN() string {
+	return c.postgresDSN(c.DBName)
+}
+
+// MaintenanceDSN points at the "postgres" database, which always exists. CREATE DATABASE
+// cannot run from inside the database being created.
+func (c Config) MaintenanceDSN() string {
+	return c.postgresDSN("postgres")
+}
+
+func (c Config) postgresDSN(database string) string {
 	query := url.Values{}
-	query.Set("database", c.DBName)
-	query.Set("encrypt", "disable")
+	// Hosted Postgres (Neon, Supabase, Render) refuses plaintext, and local Docker has no
+	// certificate, so the mode is configurable rather than assumed.
+	query.Set("sslmode", c.DBSSLMode)
 
 	dsn := url.URL{
-		Scheme:   "sqlserver",
+		Scheme:   "postgres",
 		User:     url.UserPassword(c.DBUser, c.DBPassword),
 		Host:     fmt.Sprintf("%s:%d", c.DBHost, c.DBPort),
+		Path:     "/" + database,
 		RawQuery: query.Encode(),
 	}
 	return dsn.String()
@@ -92,6 +108,7 @@ func Load() (Config, error) {
 		DBUser:             envString("DB_USER", ""),
 		DBPassword:         envString("DB_PASSWORD", ""),
 		DBName:             envString("DB_NAME", ""),
+		DBSSLMode:          envString("DB_SSLMODE", "disable"),
 		JWTSecret:          envString("JWT_SECRET", ""),
 		CORSAllowedOrigins: envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		Telegram: TelegramConfig{
@@ -107,7 +124,7 @@ func Load() (Config, error) {
 	if cfg.AppPort, err = envInt("APP_PORT", 8080); err != nil {
 		return Config{}, err
 	}
-	if cfg.DBPort, err = envInt("DB_PORT", 1433); err != nil {
+	if cfg.DBPort, err = envInt("DB_PORT", 5432); err != nil {
 		return Config{}, err
 	}
 	if cfg.JWTExpiration, err = envDuration("JWT_EXPIRATION", 24*time.Hour); err != nil {
@@ -142,6 +159,16 @@ func (c Config) validate() error {
 	}
 	if c.IsProduction() && len(c.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters in production")
+	}
+	switch c.DBSSLMode {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("DB_SSLMODE must be one of disable, allow, prefer, require, verify-ca, verify-full, got %q", c.DBSSLMode)
+	}
+	// Sending credentials in the clear to a hosted database is not something to fall back to
+	// silently, so production has to ask for TLS.
+	if c.IsProduction() && (c.DBSSLMode == "disable" || c.DBSSLMode == "allow") {
+		return fmt.Errorf("DB_SSLMODE must require TLS in production, got %q", c.DBSSLMode)
 	}
 	return c.Telegram.validate()
 }

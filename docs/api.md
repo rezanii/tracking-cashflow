@@ -233,6 +233,21 @@ report calls spending that was never written down.
 Every account is checked against the caller, so another user's account is a 422 rather than a
 way to reach their data. Filtering by `account_id` matches either side of a transfer.
 
+## Where each endpoint is used
+
+Every write is reachable from both the web app and the bot, on the same endpoint, so neither is
+a privileged path and neither can drift from the other:
+
+| Endpoint | Web | Telegram |
+| --- | --- | --- |
+| `POST /accounts`, `PUT`, `PATCH /status`, `DELETE` | Akun page | — |
+| `POST /accounts/{id}/balances` | Akun page | `/saldo <akun> <jumlah>` |
+| `POST /transactions` (EXPENSE) | Transaksi form | `/catat <akun> <jumlah> <ket>` |
+| `POST /transactions` (TRANSFER) | Transaksi form | `/topup <akun> <jumlah>` |
+| `DELETE /transactions/{id}` | Transaksi list | `/hapus <id>` |
+| `GET /reports/daily-cash-flow` | Laporan → Harian | `/report` |
+| `POST /telegram/send/daily-report` | Laporan → Harian | — |
+
 ## Daily cash flow report
 
 ```http
@@ -260,11 +275,16 @@ expected figure rather than inventing a difference.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| POST | `/telegram/pairing-code` | single-use, short-lived code; send `/start <code>` to the bot |
+| POST | `/telegram/pairing-code` | single-use, short-lived code, plus `deep_link` and `bot_username` |
 | GET | `/telegram/link` | whether a chat is connected, and which |
 | DELETE | `/telegram/link` | disconnect |
 | POST | `/telegram/send/daily-report` | `date` optional; 422 when no chat is linked |
 | POST | `/telegram/webhook` | called by Telegram, not by clients |
+
+`deep_link` is `https://t.me/<bot>?start=<code>`. Opening it makes Telegram send
+`/start <code>` as the first message, so pairing needs no typing and no second code path — the
+same `/start` handler serves both. It is omitted when the bot username cannot be resolved,
+which is the signal for a client to show the code instead of a link.
 
 The webhook takes no JWT. It authenticates with the `X-Telegram-Bot-Api-Secret-Token` header,
 compared in constant time against `TELEGRAM_WEBHOOK_SECRET`, so knowing the URL is not enough

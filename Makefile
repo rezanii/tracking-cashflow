@@ -78,7 +78,7 @@ sync-db-docs: ## Copy the backend migrations into database/migrations for review
 	cp $(BACKEND)/migrations/*.sql database/migrations/
 
 .PHONY: docker-up
-docker-up: ## Start sqlserver, run migrations and seed, then start backend and frontend
+docker-up: ## Start postgres, run migrations and seed, then start backend and frontend
 	docker compose up -d --build
 
 .PHONY: docker-down

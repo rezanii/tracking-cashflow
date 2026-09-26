@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/dto"
@@ -77,6 +79,11 @@ type telegramService struct {
 	webhookURL    string
 	webhookSecret string
 	useWebhook    bool
+
+	// botUsername is cached because it never changes for a token and is needed on every
+	// pairing request to build the deep link. The mutex guards the lazy fill.
+	usernameMu  sync.Mutex
+	botUsername string
 }
 
 func NewTelegramService(
@@ -114,6 +121,7 @@ func (s *telegramService) Configure(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("verify bot token: %w", err)
 	}
+	s.cacheUsername(username)
 	slog.Info("telegram bot ready", "username", username, "webhook", s.useWebhook)
 
 	if !s.useWebhook {
@@ -153,13 +161,47 @@ func (s *telegramService) IssuePairingCode(ctx context.Context, userID int64) (d
 			lastErr = err
 			continue
 		}
-		return dto.TelegramPairingCodeResponse{
+		response := dto.TelegramPairingCodeResponse{
 			Code:        code,
 			ExpiresAt:   pairing.ExpiresAt,
 			Instruction: fmt.Sprintf("Kirim pesan \"/start %s\" ke bot Telegram", code),
-		}, nil
+		}
+		// The deep link is what turns pairing into one tap. A bot that cannot be reached
+		// still yields a usable code, so this failure is not fatal to the request.
+		if username := s.resolveBotUsername(ctx); username != "" {
+			response.BotUsername = username
+			response.DeepLink = "https://t.me/" + username + "?start=" + url.QueryEscape(code)
+			response.Instruction = fmt.Sprintf("Buka t.me/%s lalu tekan START, atau kirim \"/start %s\"", username, code)
+		}
+		return response, nil
 	}
 	return dto.TelegramPairingCodeResponse{}, utils.WrapDomainError(utils.ErrConflict, "Failed to store pairing code", lastErr)
+}
+
+// resolveBotUsername returns the cached username, asking Telegram once if it is not known
+// yet. An unreachable bot yields an empty string rather than an error, because a pairing code
+// is still useful without the deep link.
+func (s *telegramService) resolveBotUsername(ctx context.Context) string {
+	s.usernameMu.Lock()
+	cached := s.botUsername
+	s.usernameMu.Unlock()
+	if cached != "" {
+		return cached
+	}
+
+	username, err := s.client.GetMe(ctx)
+	if err != nil {
+		slog.Warn("could not resolve the bot username for a deep link", "error", err)
+		return ""
+	}
+	s.cacheUsername(username)
+	return username
+}
+
+func (s *telegramService) cacheUsername(username string) {
+	s.usernameMu.Lock()
+	s.botUsername = username
+	s.usernameMu.Unlock()
 }
 
 func (s *telegramService) LinkStatus(ctx context.Context, userID int64) (dto.TelegramLinkResponse, error) {

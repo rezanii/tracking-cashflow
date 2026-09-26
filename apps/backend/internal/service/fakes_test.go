@@ -680,6 +680,7 @@ type fakeTelegramClient struct {
 	updates   []dto.TelegramUpdate
 	webhookOn bool
 	failSend  bool
+	failGetMe bool
 }
 
 func (c *fakeTelegramClient) SendMessage(_ context.Context, chatID int64, text string, markdown bool) error {
@@ -708,7 +709,12 @@ func (c *fakeTelegramClient) DeleteWebhook(context.Context) error {
 	return nil
 }
 
-func (c *fakeTelegramClient) GetMe(context.Context) (string, error) { return "rezanibot", nil }
+func (c *fakeTelegramClient) GetMe(context.Context) (string, error) {
+	if c.failGetMe {
+		return "", errBoom
+	}
+	return "rezanibot", nil
+}
 
 // fakeTelegramRepository is an in-memory link and pairing-code store.
 type fakeTelegramRepository struct {

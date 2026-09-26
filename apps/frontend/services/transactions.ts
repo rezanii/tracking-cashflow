@@ -3,7 +3,8 @@ import type { TransactionInput } from "@/schemas";
 import type { ApiEnvelope, Paged, Transaction, TransactionFilters } from "@/types";
 
 // toPayload normalises the form values into the shape the API validates: a transfer never
-// carries a category, and the amount stays a string so the decimal is exact.
+// carries a category, only a transfer carries a destination account, and the amount stays a
+// string so the decimal is exact.
 function toPayload(input: TransactionInput) {
   const isTransfer = input.transaction_type === "TRANSFER";
   return {
@@ -13,6 +14,9 @@ function toPayload(input: TransactionInput) {
     amount: input.amount.replace(/,/g, ""),
     description: input.description ?? "",
     reference_number: input.reference_number ?? "",
+    account_id: input.account_id ? Number(input.account_id) : null,
+    to_account_id: isTransfer && input.to_account_id ? Number(input.to_account_id) : null,
+    parent_id: input.parent_id ? Number(input.parent_id) : null,
   };
 }
 

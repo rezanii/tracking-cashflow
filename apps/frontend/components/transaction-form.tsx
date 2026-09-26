@@ -10,6 +10,7 @@ import { useAsync } from "@/hooks/use-async";
 import { ApiError } from "@/lib/api-client";
 import { todayInJakarta } from "@/lib/format";
 import { transactionSchema, type TransactionInput } from "@/schemas";
+import { accountService, accountTypeLabels } from "@/services/accounts";
 import { categoryService } from "@/services/categories";
 import { transactionService } from "@/services/transactions";
 import type { Transaction } from "@/types";
@@ -27,6 +28,10 @@ export function TransactionForm({ transaction }: TransactionFormProps) {
     () => categoryService.listAllActive(),
     [],
   );
+  const { data: accounts, loading: loadingAccounts } = useAsync(
+    () => accountService.listAllActive(),
+    [],
+  );
 
   const form = useForm<TransactionInput>({
     resolver: zodResolver(transactionSchema),
@@ -37,6 +42,9 @@ export function TransactionForm({ transaction }: TransactionFormProps) {
       amount: transaction?.amount ?? "",
       description: transaction?.description ?? "",
       reference_number: transaction?.reference_number ?? "",
+      account_id: transaction?.account_id ? String(transaction.account_id) : "",
+      to_account_id: transaction?.to_account_id ? String(transaction.to_account_id) : "",
+      parent_id: transaction?.parent_id ? String(transaction.parent_id) : "",
     },
   });
 
@@ -58,6 +66,17 @@ export function TransactionForm({ transaction }: TransactionFormProps) {
       form.setValue("category_id", "");
     }
   }, [availableCategories, isTransfer, form]);
+
+  // A destination account only means anything on a transfer, so leaving it set after a switch
+  // would send the API something it refuses.
+  useEffect(() => {
+    if (!isTransfer && form.getValues("to_account_id")) {
+      form.setValue("to_account_id", "");
+    }
+  }, [isTransfer, form]);
+
+  const accountOptions = accounts ?? [];
+  const sourceAccountID = form.watch("account_id");
 
   async function onSubmit(values: TransactionInput) {
     setFormError(null);
@@ -144,6 +163,58 @@ export function TransactionForm({ transaction }: TransactionFormProps) {
           </Select>
         </Field>
 
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label={isTransfer ? "Akun Sumber" : "Akun"}
+            htmlFor="account_id"
+            required={isTransfer}
+            hint={
+              isTransfer
+                ? "Dana keluar dari akun ini"
+                : "Kosongkan bila termasuk cash flow rumah tangga"
+            }
+            error={form.formState.errors.account_id?.message}
+          >
+            <Select
+              id="account_id"
+              disabled={loadingAccounts}
+              invalid={Boolean(form.formState.errors.account_id)}
+              {...form.register("account_id")}
+            >
+              <option value="">{isTransfer ? "Pilih akun sumber" : "Cash flow (tanpa akun)"}</option>
+              {accountOptions.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} — {accountTypeLabels[account.account_type] ?? account.account_type}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label="Akun Tujuan"
+            htmlFor="to_account_id"
+            required={isTransfer}
+            hint={isTransfer ? "Dana masuk ke akun ini" : "Hanya berlaku untuk transfer"}
+            error={form.formState.errors.to_account_id?.message}
+          >
+            <Select
+              id="to_account_id"
+              disabled={!isTransfer || loadingAccounts}
+              invalid={Boolean(form.formState.errors.to_account_id)}
+              {...form.register("to_account_id")}
+            >
+              <option value="">{isTransfer ? "Pilih akun tujuan" : "Tidak berlaku"}</option>
+              {accountOptions
+                .filter((account) => String(account.id) !== sourceAccountID)
+                .map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} — {accountTypeLabels[account.account_type] ?? account.account_type}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+        </div>
+
         <Field
           label="Nominal"
           htmlFor="amount"
@@ -177,6 +248,21 @@ export function TransactionForm({ transaction }: TransactionFormProps) {
             placeholder="Contoh: INV-0001"
             invalid={Boolean(form.formState.errors.reference_number)}
             {...form.register("reference_number")}
+          />
+        </Field>
+
+        <Field
+          label="Bagian dari Transaksi"
+          htmlFor="parent_id"
+          hint="Isi id transaksi induk bila baris ini merinci transaksi lain, misalnya isi dari satu tarik tunai. Nominalnya tidak ditambahkan ke total."
+          error={form.formState.errors.parent_id?.message}
+        >
+          <Input
+            id="parent_id"
+            inputMode="numeric"
+            placeholder="Kosongkan bila bukan rincian"
+            invalid={Boolean(form.formState.errors.parent_id)}
+            {...form.register("parent_id")}
           />
         </Field>
 

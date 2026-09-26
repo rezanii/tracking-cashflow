@@ -154,7 +154,7 @@ func (r *categoryRepository) SetActive(ctx context.Context, userID, id int64, is
 	result := r.db.WithContext(ctx).
 		Model(&model.Category{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Updates(map[string]any{"is_active": isActive, "updated_at": gorm.Expr("SYSUTCDATETIME()")})
+		Updates(map[string]any{"is_active": isActive, "updated_at": gorm.Expr("NOW()")})
 	if result.Error != nil {
 		return result.Error
 	}

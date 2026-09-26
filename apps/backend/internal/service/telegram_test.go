@@ -373,3 +373,71 @@ func excerpt(runes []rune, index int) string {
 	}
 	return string(runes[start:end])
 }
+
+// The deep link is what makes pairing one tap instead of a typed command, so it has to carry
+// the code exactly as /start expects it.
+func TestPairingCodeCarriesADeepLink(t *testing.T) {
+	service, _, _ := newTelegramScenario()
+
+	issued, err := service.IssuePairingCode(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("IssuePairingCode returned error: %v", err)
+	}
+
+	if issued.BotUsername != "rezanibot" {
+		t.Fatalf("bot username = %q, want rezanibot", issued.BotUsername)
+	}
+	want := "https://t.me/rezanibot?start=" + issued.Code
+	if issued.DeepLink != want {
+		t.Fatalf("deep link = %q, want %q", issued.DeepLink, want)
+	}
+	// The instruction still names the code, so a user who cannot open the link is not stuck.
+	if !strings.Contains(issued.Instruction, issued.Code) {
+		t.Fatalf("instruction %q does not mention the code", issued.Instruction)
+	}
+}
+
+// Opening the link sends exactly "/start <code>", so the same handler must link the chat.
+func TestDeepLinkPayloadLinksTheChat(t *testing.T) {
+	service, _, _ := newTelegramScenario()
+	ctx := context.Background()
+
+	issued, err := service.IssuePairingCode(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("IssuePairingCode returned error: %v", err)
+	}
+
+	// Telegram delivers the payload as the command argument, which is what a deep link tap
+	// produces.
+	payload := strings.TrimPrefix(issued.DeepLink, "https://t.me/rezanibot?start=")
+	service.HandleUpdate(ctx, messageUpdate(50, testChatID, "/start "+payload))
+
+	status, err := service.LinkStatus(ctx, ownerID)
+	if err != nil || !status.Linked {
+		t.Fatalf("deep link payload did not link the chat: %+v, %v", status, err)
+	}
+}
+
+// A bot that cannot be reached must still hand back a usable code rather than failing.
+func TestPairingCodeWithoutAReachableBot(t *testing.T) {
+	reports, _, accounts := newReportScenario()
+	categories := newFakeCategoryRepository()
+	client := &fakeTelegramClient{failGetMe: true}
+	service := NewTelegramService(
+		client, newFakeTelegramRepository(), reports, accounts,
+		NewAccountService(accounts),
+		NewTransactionService(newFakeTransactionRepository(categories), categories, accounts, &fakeTxManager{}),
+		categories, 15*time.Minute, "", "", false,
+	)
+
+	issued, err := service.IssuePairingCode(context.Background(), ownerID)
+	if err != nil {
+		t.Fatalf("IssuePairingCode returned error: %v", err)
+	}
+	if issued.Code == "" {
+		t.Fatal("no code was issued")
+	}
+	if issued.DeepLink != "" || issued.BotUsername != "" {
+		t.Fatalf("deep link should be empty when the bot is unreachable: %+v", issued)
+	}
+}

@@ -72,14 +72,14 @@ func (r *reportRepository) ExpenseByCategory(ctx context.Context, userID int64, 
 	return rows, err
 }
 
-// Monthly groups on the ISO year-month prefix. CONVERT with style 126 is sargable-free but
+// Monthly groups on the ISO year-month prefix. to_char is not sargable but
 // cheap here because the period is already narrowed by the indexed date range.
 func (r *reportRepository) Monthly(ctx context.Context, userID int64, filter dto.ReportFilter) ([]PeriodTotal, error) {
-	return r.grouped(ctx, userID, filter, "CONVERT(char(7), transaction_date, 126)")
+	return r.grouped(ctx, userID, filter, "to_char(transaction_date, 'YYYY-MM')")
 }
 
 func (r *reportRepository) Daily(ctx context.Context, userID int64, filter dto.ReportFilter) ([]PeriodTotal, error) {
-	return r.grouped(ctx, userID, filter, "CONVERT(char(10), transaction_date, 126)")
+	return r.grouped(ctx, userID, filter, "to_char(transaction_date, 'YYYY-MM-DD')")
 }
 
 func (r *reportRepository) grouped(ctx context.Context, userID int64, filter dto.ReportFilter, expression string) ([]PeriodTotal, error) {
