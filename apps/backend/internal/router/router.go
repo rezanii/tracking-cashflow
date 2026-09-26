@@ -62,7 +62,7 @@ func NewWithTelegram(cfg config.Config, db *gorm.DB) (http.Handler, service.Tele
 	telegramLinks := repository.NewTelegramRepository(db)
 	txManager := repository.NewTxManager(db)
 
-	authService := service.NewAuthService(users, tokens)
+	authService := service.NewAuthService(users, tokens, cfg.RegisterInviteCode)
 	categoryService := service.NewCategoryService(categories)
 	accountService := service.NewAccountService(accounts)
 	transactionService := service.NewTransactionService(transactions, categories, accounts, txManager)

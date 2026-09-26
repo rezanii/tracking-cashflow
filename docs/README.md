@@ -919,6 +919,20 @@ running it on every deploy is fine. `-command drop` refuses to run when `APP_ENV
 Do **not** run `/app/seed` in production — it refuses anyway, because it writes a known
 password.
 
+### Closing registration
+
+`POST /auth/register` is public, so a deployed instance is open to anyone who finds it. Setting
+`REGISTER_INVITE_CODE` closes it: registration then requires a matching `invite_code` in the
+body, compared in constant time, and checked before the email lookup so a wrong code cannot be
+used to discover which emails are already registered.
+
+```dotenv
+REGISTER_INVITE_CODE=<a long random value>
+```
+
+Leaving it empty keeps registration open, which is what local development wants. The web app
+always shows the field and lets the API decide whether it is required.
+
 ### 3. Backend
 
 Two things are true of every option, because the API is serverless or sleeping on all of the
@@ -1073,3 +1087,4 @@ not in this repo, because the recommended shape above does not need it.
 - [ ] migrations run as a release command, seed not run
 - [ ] `TELEGRAM_MODE=webhook` with a secret, or `off`
 - [ ] the seeded `admin@example.com` account does not exist in the production database
+- [ ] `REGISTER_INVITE_CODE` set, or registration is deliberately open

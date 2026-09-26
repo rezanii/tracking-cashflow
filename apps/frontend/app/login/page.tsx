@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   const registerForm = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", password: "" },
+    defaultValues: { name: "", email: "", password: "", invite_code: "" },
   });
 
   // applyFieldErrors moves the API field errors onto the matching inputs so the user sees
@@ -191,6 +191,21 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   invalid={Boolean(registerForm.formState.errors.password)}
                   {...registerForm.register("password")}
+                />
+              </Field>
+
+              <Field
+                label="Kode Undangan"
+                htmlFor="register-invite"
+                hint="Diperlukan bila pemilik aplikasi menutup pendaftaran. Kosongkan bila tidak punya."
+                error={registerForm.formState.errors.invite_code?.message}
+              >
+                <Input
+                  id="register-invite"
+                  autoComplete="off"
+                  placeholder="Kosongkan bila tidak diminta"
+                  invalid={Boolean(registerForm.formState.errors.invite_code)}
+                  {...registerForm.register("invite_code")}
                 />
               </Field>
 

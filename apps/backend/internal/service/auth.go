@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	"strings"
 	"time"
 
@@ -26,13 +27,35 @@ type AuthService interface {
 type authService struct {
 	users  repository.UserRepository
 	tokens *utils.TokenManager
+	// inviteCode gates registration; empty means registration is open.
+	inviteCode string
 }
 
-func NewAuthService(users repository.UserRepository, tokens *utils.TokenManager) AuthService {
-	return &authService{users: users, tokens: tokens}
+func NewAuthService(users repository.UserRepository, tokens *utils.TokenManager, inviteCode string) AuthService {
+	return &authService{users: users, tokens: tokens, inviteCode: inviteCode}
+}
+
+// checkInvite gates registration when an invite code is configured. Comparison is
+// constant-time so a wrong code cannot be narrowed down one character at a time.
+func (s *authService) checkInvite(provided string) error {
+	if s.inviteCode == "" {
+		return nil
+	}
+	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(provided)), []byte(s.inviteCode)) != 1 {
+		return utils.NewFieldError("Validation failed", map[string]string{
+			"invite_code": "invite code is not valid",
+		})
+	}
+	return nil
 }
 
 func (s *authService) Register(ctx context.Context, request dto.RegisterRequest) (dto.UserResponse, error) {
+	// Checked before anything else, so a wrong code cannot be used to probe which emails are
+	// already registered.
+	if err := s.checkInvite(request.InviteCode); err != nil {
+		return dto.UserResponse{}, err
+	}
+
 	email := normalizeEmail(request.Email)
 
 	exists, err := s.users.ExistsByEmail(ctx, email)

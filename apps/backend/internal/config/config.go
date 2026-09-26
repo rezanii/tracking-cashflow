@@ -31,6 +31,11 @@ type Config struct {
 
 	CORSAllowedOrigins []string
 
+	// RegisterInviteCode closes public registration when set. Empty leaves it open, which is
+	// what local development wants; a deployed instance should set it, or anyone who finds
+	// the site can create an account on it.
+	RegisterInviteCode string
+
 	Telegram TelegramConfig
 }
 
@@ -126,6 +131,7 @@ func Load() (Config, error) {
 		DatabaseURL:        envString("DATABASE_URL", ""),
 		JWTSecret:          envString("JWT_SECRET", ""),
 		CORSAllowedOrigins: envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
+		RegisterInviteCode: envString("REGISTER_INVITE_CODE", ""),
 		Telegram: TelegramConfig{
 			BotToken:      envString("TELEGRAM_BOT_TOKEN", ""),
 			Mode:          TelegramMode(strings.ToLower(envString("TELEGRAM_MODE", string(TelegramModeOff)))),

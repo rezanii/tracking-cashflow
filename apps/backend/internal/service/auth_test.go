@@ -16,7 +16,7 @@ func newAuthService(t *testing.T) (AuthService, *fakeUserRepository, *utils.Toke
 	t.Helper()
 	users := newFakeUserRepository()
 	tokens := utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour)
-	return NewAuthService(users, tokens), users, tokens
+	return NewAuthService(users, tokens, ""), users, tokens
 }
 
 func TestRegisterStoresOnlyAHash(t *testing.T) {
@@ -173,7 +173,7 @@ func TestMeReturnsTheUser(t *testing.T) {
 func TestLoginSurfacesRepositoryFailureAsUnauthorized(t *testing.T) {
 	users := newFakeUserRepository()
 	users.failOn = "FindByEmail"
-	service := NewAuthService(users, utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour))
+	service := NewAuthService(users, utils.NewTokenManager("unit-test-secret-value-long-enough", time.Hour), "")
 
 	_, err := service.Login(context.Background(), dto.LoginRequest{Email: "user@example.com", Password: "Admin123!"})
 	if err == nil {
@@ -186,5 +186,65 @@ func TestLoginSurfacesRepositoryFailureAsUnauthorized(t *testing.T) {
 	}
 	if !errors.Is(domainErr.Cause(), errBoom) {
 		t.Fatalf("cause = %v, want the repository failure", domainErr.Cause())
+	}
+}
+
+// With an invite code configured, registration is closed to anyone without it. The check runs
+// before the email lookup, so a wrong code cannot be used to discover which emails exist.
+func TestRegisterRequiresTheInviteCodeWhenConfigured(t *testing.T) {
+	users := newFakeUserRepository()
+	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "undangan-rahasia")
+
+	valid := dto.RegisterRequest{Name: "Orang Baru", Email: "baru@example.com", Password: "Passw0rd!"}
+
+	for name, code := range map[string]string{
+		"missing": "",
+		"wrong":   "undangan-salah",
+		"prefix":  "undangan",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := valid
+			request.InviteCode = code
+
+			_, err := service.Register(context.Background(), request)
+			if err == nil {
+				t.Fatalf("registration succeeded with a %s invite code", name)
+			}
+			domainErr, ok := utils.AsDomainError(err)
+			if !ok || domainErr.Kind != utils.ErrValidation {
+				t.Fatalf("error = %v, want a validation error", err)
+			}
+			if _, named := domainErr.Fields["invite_code"]; !named {
+				t.Fatalf("fields = %v, want the error on invite_code", domainErr.Fields)
+			}
+			if len(users.users) != 0 {
+				t.Fatal("a user was created despite the invalid code")
+			}
+		})
+	}
+
+	t.Run("correct code, and surrounding space is tolerated", func(t *testing.T) {
+		request := valid
+		request.InviteCode = "  undangan-rahasia  "
+
+		created, err := service.Register(context.Background(), request)
+		if err != nil {
+			t.Fatalf("Register returned error: %v", err)
+		}
+		if created.Email != "baru@example.com" {
+			t.Fatalf("email = %q", created.Email)
+		}
+	})
+}
+
+// Without a configured code the endpoint stays open, which is what local development uses.
+func TestRegisterStaysOpenWithoutAnInviteCode(t *testing.T) {
+	users := newFakeUserRepository()
+	service := NewAuthService(users, utils.NewTokenManager("0123456789012345678901234567890123", time.Hour), "")
+
+	if _, err := service.Register(context.Background(), dto.RegisterRequest{
+		Name: "Orang Baru", Email: "baru@example.com", Password: "Passw0rd!",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
 	}
 }

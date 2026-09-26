@@ -5,7 +5,10 @@ import "time"
 type RegisterRequest struct {
 	Name     string `json:"name" validate:"required,min=2,max=150" example:"John Doe"`
 	Email    string `json:"email" validate:"required,email,max=255" example:"user@example.com"`
-	Password string `json:"password" validate:"required,password,max=72" example:"Admin123!"`
+	Password string `json:"password" validate:"required,password,max=72" example:"Passw0rd!"`
+	// InviteCode is only required when the server was configured with one. It is not
+	// validated for shape here, because the only thing that matters is whether it matches.
+	InviteCode string `json:"invite_code" validate:"max=200" example:"undangan-2026"`
 }
 
 type LoginRequest struct {

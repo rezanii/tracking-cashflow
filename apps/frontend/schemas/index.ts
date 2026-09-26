@@ -32,6 +32,9 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, "Password harus memuat huruf besar")
     .regex(/[a-z]/, "Password harus memuat huruf kecil")
     .regex(/\d/, "Password harus memuat angka"),
+  // Only required when the server was configured with a code; the API decides and reports the
+  // error on this field.
+  invite_code: z.string().max(200, "Kode undangan maksimal 200 karakter").optional(),
 });
 
 export const transactionSchema = z
