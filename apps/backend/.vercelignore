@@ -1,0 +1,11 @@
+# Vercel uploads this directory to build it. Nothing here that holds a credential or is a
+# build artifact should travel with it.
+.env
+.env.*
+.vercel
+bin/
+*.exe
+coverage.out
+*.xlsx
+*.pdf
+tests/

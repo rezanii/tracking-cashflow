@@ -20,10 +20,10 @@
 
 # Proxy the API through this domain. status 200 with force makes it a rewrite rather than a
 # redirect, so the browser never learns the backend's address.
-# Replace BACKEND_ORIGIN with the deployed API, e.g. https://<user>-<space>.hf.space
+# The deployed Go API. Only this line knows the backend address.
 [[redirects]]
   from   = "/api/*"
-  to     = "https://BACKEND_ORIGIN/api/:splat"
+  to     = "https://tracking-cashflow-api.vercel.app/api/:splat"
   status = 200
   force  = true
 
