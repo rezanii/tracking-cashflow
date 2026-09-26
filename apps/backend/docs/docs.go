@@ -2847,6 +2847,12 @@ const docTemplate = `{
                     "maxLength": 255,
                     "example": "user@example.com"
                 },
+                "invite_code": {
+                    "description": "InviteCode is only required when the server was configured with one. It is not\nvalidated for shape here, because the only thing that matters is whether it matches.",
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "undangan-2026"
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 150,
@@ -2856,7 +2862,7 @@ const docTemplate = `{
                 "password": {
                     "type": "string",
                     "maxLength": 72,
-                    "example": "Admin123!"
+                    "example": "Passw0rd!"
                 }
             }
         },

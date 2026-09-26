@@ -264,15 +264,16 @@ func TestDailyCashFlowReportOverHTTP(t *testing.T) {
 	// The bank leg: other money in, the fee, and the two allocations out.
 	h.createAccountTransaction("INCOME", &incoming, bank, nil, nil, "15000", "Dana masuk lain", "IT-BK-1")
 	h.createAccountTransaction("EXPENSE", &admin, bank, nil, nil, "2500", "Admin BI-Fast", "IT-BK-2")
-	h.createAccountTransaction("TRANSFER", nil, bank, &savings, nil, "1000000", "Dana Cadangan", "IT-TU-1")
+	h.createAccountTransaction("TRANSFER", nil, bank, &savings, nil, "300000", "Dana Cadangan", "IT-TU-1")
 	h.createAccountTransaction("TRANSFER", nil, bank, &wallet, nil, "600000", "Jatah Dompet Harian", "IT-TU-2")
 
-	// The allowance: a withdrawal recorded once, with its parts underneath.
+	// The allowance: a withdrawal recorded once, with its parts underneath, so the recorded
+	// total is 150.000 + 100.000 + 250.000 = 500.000 rather than 600.000.
 	h.createAccountTransaction("EXPENSE", &daily, wallet, nil, nil, "150000", "Listrik", "IT-LA-1")
 	withdrawal := h.createAccountTransaction("EXPENSE", &daily, wallet, nil, nil, "100000", "Tarik Tunai", "IT-LA-2")
 	h.createAccountTransaction("EXPENSE", &daily, wallet, nil, &withdrawal, "60000", "Bensin", "IT-LA-2-A")
 	h.createAccountTransaction("EXPENSE", &daily, wallet, nil, &withdrawal, "40000", "Jajan anak", "IT-LA-2-B")
-	h.createAccountTransaction("EXPENSE", &daily, wallet, nil, nil, "416000", "Pulsa", "IT-LA-3")
+	h.createAccountTransaction("EXPENSE", &daily, wallet, nil, nil, "250000", "Pulsa", "IT-LA-3")
 
 	h.recordBalance(wallet, "72500")
 	h.recordBalance(bank, "20000")
