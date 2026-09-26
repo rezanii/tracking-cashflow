@@ -1,0 +1,15 @@
+# Compiled output and local environment stay out of the build context.
+bin
+*.exe
+coverage.out
+.env
+.env.local
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+
+# Generated reports produced while testing exports locally.
+*.xlsx
+*.pdf

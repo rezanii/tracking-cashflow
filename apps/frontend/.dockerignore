@@ -1,0 +1,16 @@
+# Dependencies and build output are produced inside the image, never copied into it.
+node_modules
+.next
+out
+
+# Local environment and logs must not leak into an image.
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md
