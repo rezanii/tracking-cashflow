@@ -201,9 +201,6 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-500">
-          Akun contoh pengembangan: admin@example.com / Admin123!
-        </p>
       </div>
     </div>
   );

@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.*.local
+# .env.example is untracked too: the repository is public, and every variable it lists is
+# documented in docs/README.md instead. Keep a local copy as your own template.
+.env.example
 
 # Go
 /apps/backend/bin/

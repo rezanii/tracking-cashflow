@@ -21,7 +21,8 @@ docker compose up -d
 ```
 
 Frontend on `FRONTEND_HOST_PORT` (3000 by default), API on `APP_HOST_PORT` (8080), Swagger at
-`/swagger/index.html`. Development login: `admin@example.com` / `Admin123!`.
+`/swagger/index.html`. The seed creates a development account; see
+[docs/README.md](docs/README.md) for its credentials.
 
 Deploying: Netlify for the frontend, Vercel or a Hugging Face Docker Space for the API, Neon for the
 database — see [§14 Deploying](docs/README.md#14-deploying).
