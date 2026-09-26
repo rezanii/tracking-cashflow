@@ -21,6 +21,10 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	DBSSLMode  string
+	// DatabaseURL, when set, is used verbatim and the six DB_* parts are ignored. It is the
+	// variable Neon, Render, Railway and Heroku all inject, so a deployment needs one secret
+	// rather than six kept in step.
+	DatabaseURL string
 
 	JWTSecret     string
 	JWTExpiration time.Duration
@@ -72,6 +76,9 @@ func (c Config) IsProduction() bool {
 // DatabaseName is a parameter so the migrator can reach the maintenance database without
 // building a second config by hand.
 func (c Config) PostgresDSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
 	return c.postgresDSN(c.DBName)
 }
 
@@ -79,6 +86,13 @@ func (c Config) PostgresDSN() string {
 // cannot run from inside the database being created.
 func (c Config) MaintenanceDSN() string {
 	return c.postgresDSN("postgres")
+}
+
+// ManagesDatabase reports whether this deployment is expected to create its own database.
+// A hosted Postgres provisions one for us and often denies CREATEDB to the application role,
+// so the migrator must not try.
+func (c Config) ManagesDatabase() bool {
+	return c.DatabaseURL == ""
 }
 
 func (c Config) postgresDSN(database string) string {
@@ -109,6 +123,7 @@ func Load() (Config, error) {
 		DBPassword:         envString("DB_PASSWORD", ""),
 		DBName:             envString("DB_NAME", ""),
 		DBSSLMode:          envString("DB_SSLMODE", "disable"),
+		DatabaseURL:        envString("DATABASE_URL", ""),
 		JWTSecret:          envString("JWT_SECRET", ""),
 		CORSAllowedOrigins: envStringSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		Telegram: TelegramConfig{
@@ -134,14 +149,51 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	if cfg.DatabaseURL != "" {
+		if err := cfg.applyDatabaseURL(); err != nil {
+			return Config{}, err
+		}
+	}
+
 	if err := cfg.validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
 }
 
+// applyDatabaseURL fills the individual fields from the URL. They are still used for logging
+// and by the migration driver, which needs the database name.
+func (c *Config) applyDatabaseURL() error {
+	parsed, err := url.Parse(c.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL is not a valid URL: %w", err)
+	}
+	switch parsed.Scheme {
+	case "postgres", "postgresql":
+	default:
+		return fmt.Errorf("DATABASE_URL must use the postgres scheme, got %q", parsed.Scheme)
+	}
+
+	name := strings.TrimPrefix(parsed.Path, "/")
+	if name == "" {
+		return fmt.Errorf("DATABASE_URL must name a database")
+	}
+	c.DBName = name
+	c.DBHost = parsed.Hostname()
+	if password, ok := parsed.User.Password(); ok {
+		c.DBPassword = password
+	}
+	c.DBUser = parsed.User.Username()
+	if mode := parsed.Query().Get("sslmode"); mode != "" {
+		c.DBSSLMode = mode
+	}
+	return nil
+}
+
 func (c Config) validate() error {
 	var missing []string
+	// With a DATABASE_URL these were filled from it, so a gap means the URL was incomplete
+	// rather than that the variables were forgotten.
 	if c.DBUser == "" {
 		missing = append(missing, "DB_USER")
 	}

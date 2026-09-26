@@ -41,10 +41,15 @@ func run(command string, steps, version int, path string) error {
 		return fmt.Errorf("load configuration: %w", err)
 	}
 
-	// A fresh Postgres has no application database yet, and golang-migrate cannot create
-	// the database it is asked to connect to.
-	if err := ensureDatabase(cfg); err != nil {
-		return err
+	// A fresh local Postgres has no application database yet and golang-migrate cannot create
+	// the database it is told to connect to. A hosted Postgres provisions one itself and
+	// usually denies CREATEDB to the application role, so that case skips this entirely.
+	if cfg.ManagesDatabase() {
+		if err := ensureDatabase(cfg); err != nil {
+			return fmt.Errorf("ensure database: %w", err)
+		}
+	} else {
+		slog.Info("database is provider managed; skipping create", "database", cfg.DBName)
 	}
 
 	db, err := repository.NewDatabase(cfg)

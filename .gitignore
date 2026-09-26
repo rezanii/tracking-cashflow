@@ -14,6 +14,7 @@ coverage.out
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 .pnpm-debug.log*
@@ -33,3 +34,4 @@ Thumbs.db
 # The source of truth is apps/backend/migrations, which stays tracked: the migrator
 # runs it, so ignoring that would leave a fresh clone unable to build the schema.
 /database/migrations/
+.neon

@@ -778,6 +778,19 @@ run this Go backend as it stands, for one concrete reason: the Telegram poller i
 holding a long poll open for the life of the process, and serverless has no such life. The
 backend wants a host that runs a container.
 
+### What goes where
+
+| Piece | Host | Why |
+| --- | --- | --- |
+| Next.js frontend | **Netlify** or Vercel | static assets and SSR, which is what they are built for |
+| Go API | **Render**, Railway or Fly | needs a process that stays alive; the Telegram poller holds a long poll open |
+| Postgres | **Neon** or Supabase | any managed Postgres; the choice is independent of the frontend host |
+| Local development | Docker Postgres | unaffected by a Neon link: `DATABASE_URL` lands in the root `.env`, which compose does not pass to the containers |
+
+Netlify cannot host the Go API: its functions are short-lived and are not a Go runtime, so the
+poller has nowhere to live and the API has no process to be. Splitting the two is not a
+workaround — it is the shape these platforms are built for, and it needs no code changes.
+
 ### Recommended shape
 
 ```
@@ -794,9 +807,27 @@ build, and the poller keeps working because the process keeps running.
 
 ### 1. Database
 
-Create a Postgres and copy its connection details. Any managed Postgres works; the free tiers
-worth knowing about are [Neon](https://neon.com) (scale-to-zero, which means an occasional
-cold start) and [Supabase](https://supabase.com) (pauses after about a week idle).
+Create a Postgres and copy its connection details. **Supabase is not required** — any managed
+Postgres works, and the database is unrelated to where the frontend is hosted. The free tiers
+worth knowing about are [Neon](https://neon.com) (scale-to-zero, so expect an occasional cold
+start) and [Supabase](https://supabase.com) (pauses after about a week idle). Neon is the
+simpler fit here because this app brings its own auth and storage, so Supabase's extras go
+unused.
+
+One variable is enough, and it is the one every host injects:
+
+```dotenv
+DATABASE_URL=postgres://user:password@host/dbname?sslmode=require
+```
+
+`DATABASE_URL` takes precedence over the six `DB_*` values and is passed to the driver
+verbatim, so a provider's own options survive. The individual parts stay for local Docker.
+
+With this set the migrator **does not try to create the database**: a hosted Postgres
+provisions one and usually denies `CREATEDB` to the application role.
+
+<details>
+<summary>Setting the parts individually instead</summary>
 
 ```dotenv
 DB_HOST=<host from the provider>
@@ -806,6 +837,33 @@ DB_PASSWORD=<password>
 DB_NAME=<database>
 DB_SSLMODE=require
 ```
+
+</details>
+
+#### With the Neon CLI
+
+`neon link` writes `DATABASE_URL` into `.env` for you, along with an unpooled variant:
+
+```bash
+npm i -g neon@latest
+neon auth
+neon link --project-id <project-id> --branch production -y
+```
+
+Use **`DATABASE_URL_UNPOOLED` for migrations** and the pooled `DATABASE_URL` for the running
+API. DDL through a transaction-mode pooler can misbehave, while the API benefits from pooling:
+
+```bash
+cd apps/backend
+DATABASE_URL="$DATABASE_URL_UNPOOLED" go run ./cmd/migrate -command up
+```
+
+`neon.ts` is a branch policy applied by `neon deploy` (an alias for `neon config apply`). Run
+`neon config plan` first — it is a dry run, and it is the only way to see whether an apply
+would change a protected or production branch rather than do nothing. This project's policy
+plans clean, because the app only needs Postgres and declares no other Neon services.
+
+`.neon` pins the branch per developer and is gitignored; `neon.ts` is committed.
 
 `DB_SSLMODE=require` is not optional in production — the config refuses to start with
 `disable` or `allow` when `APP_ENV=production`, because sending credentials in the clear to a
@@ -848,14 +906,36 @@ frontend's requests are rejected by the browser.
 
 ### 4. Frontend
 
-Deploy `apps/frontend` to Vercel or Netlify with one build-time variable:
+`netlify.toml` at the repo root already carries the monorepo settings, so connecting the
+repository is enough — Netlify reads the base directory, the build command and the Next.js
+plugin from it:
+
+```toml
+[build]
+  base    = "apps/frontend"
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+```
+
+Set one build-time variable in the Netlify UI (**Site settings → Environment variables**):
 
 ```dotenv
 NEXT_PUBLIC_API_URL=https://<your-backend-domain>/api/v1
 ```
 
 Next.js inlines `NEXT_PUBLIC_*` into the bundle, so this is **baked at build time**. Changing
-it needs a rebuild, not a restart — a redeploy with the variable edited.
+it needs a redeploy, not a restart.
+
+Vercel needs no config file: point it at `apps/frontend` as the root directory and set the same
+variable.
+
+> **`output: "standalone"` is opt-in**, via `NEXT_OUTPUT=standalone`, which only the Dockerfile
+> sets. Netlify and Vercel build their own adapter output, and forcing standalone there deploys
+> a site that serves nothing. If you add a build step of your own, do not set that variable
+> unless you are building the container.
 
 ### 5. Telegram
 
@@ -891,7 +971,7 @@ not in this repo, because the recommended shape above does not need it.
 
 ### Checklist before the first deploy
 
-- [ ] `DB_SSLMODE=require`
+- [ ] `DATABASE_URL` set (or `DB_SSLMODE=require` on the individual parts)
 - [ ] `JWT_SECRET` at least 32 random characters, not the development value
 - [ ] `CORS_ALLOWED_ORIGINS` is the real frontend origin
 - [ ] `NEXT_PUBLIC_API_URL` is the real backend origin, and the frontend was **rebuilt** after

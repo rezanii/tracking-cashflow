@@ -22,6 +22,9 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+# The image serves the traced output itself, so standalone is asked for explicitly here rather
+# than being forced on every build.
+ENV NEXT_OUTPUT=standalone
 
 RUN npm run build
 

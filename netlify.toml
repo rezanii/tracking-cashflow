@@ -1,0 +1,17 @@
+# Netlify hosts the frontend only. The Go API needs a host that runs a long-lived process
+# (Render, Railway, Fly): the Telegram poller holds a connection open for the life of the
+# process, which a short-lived function cannot do.
+[build]
+  # This is a monorepo, so the build runs inside the frontend workspace.
+  base    = "apps/frontend"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# The Next.js runtime turns the build into functions and static assets. Without it a Next app
+# deploys as bare files and every route but the homepage 404s.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
