@@ -136,7 +136,13 @@ func Load() (Config, error) {
 	}
 
 	var err error
-	if cfg.AppPort, err = envInt("APP_PORT", 8080); err != nil {
+	// Every PaaS injects PORT and expects the service to listen on exactly that; APP_PORT
+	// stays the explicit override for local runs and Docker Compose.
+	defaultPort := 8080
+	if injected, err := envInt("PORT", 0); err == nil && injected > 0 {
+		defaultPort = injected
+	}
+	if cfg.AppPort, err = envInt("APP_PORT", defaultPort); err != nil {
 		return Config{}, err
 	}
 	if cfg.DBPort, err = envInt("DB_PORT", 5432); err != nil {

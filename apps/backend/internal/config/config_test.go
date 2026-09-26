@@ -103,3 +103,45 @@ func TestProductionRequiresTLS(t *testing.T) {
 		t.Fatalf("production rejected require: %v", err)
 	}
 }
+
+// A PaaS injects PORT and routes traffic to exactly that port, so ignoring it would leave the
+// service listening where nothing reaches it.
+func TestPortIsTakenFromTheEnvironment(t *testing.T) {
+	t.Setenv("DB_USER", "u")
+	t.Setenv("DB_PASSWORD", "p")
+	t.Setenv("DB_NAME", "d")
+	t.Setenv("JWT_SECRET", "0123456789012345678901234567890123")
+
+	t.Run("PORT alone", func(t *testing.T) {
+		t.Setenv("PORT", "10000")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load returned error: %v", err)
+		}
+		if cfg.AppPort != 10000 {
+			t.Fatalf("port = %d, want 10000 from PORT", cfg.AppPort)
+		}
+	})
+
+	t.Run("APP_PORT wins", func(t *testing.T) {
+		t.Setenv("PORT", "10000")
+		t.Setenv("APP_PORT", "8090")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load returned error: %v", err)
+		}
+		if cfg.AppPort != 8090 {
+			t.Fatalf("port = %d, want 8090: an explicit APP_PORT overrides PORT", cfg.AppPort)
+		}
+	})
+
+	t.Run("neither set", func(t *testing.T) {
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load returned error: %v", err)
+		}
+		if cfg.AppPort != 8080 {
+			t.Fatalf("port = %d, want the 8080 default", cfg.AppPort)
+		}
+	})
+}

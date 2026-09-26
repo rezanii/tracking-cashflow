@@ -52,7 +52,12 @@ func main() {
 }
 
 func probeHealth() error {
+	// Mirrors config.Load: an explicit APP_PORT wins, otherwise the PORT a PaaS injects, then
+	// the default. Probing the wrong port would report a healthy service as dead.
 	port := strings.TrimSpace(os.Getenv("APP_PORT"))
+	if port == "" {
+		port = strings.TrimSpace(os.Getenv("PORT"))
+	}
 	if port == "" {
 		port = "8080"
 	}
