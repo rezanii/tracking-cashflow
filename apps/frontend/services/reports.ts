@@ -121,5 +121,10 @@ export function saveBlob(blob: Blob, filename: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.URL.revokeObjectURL(url);
+
+  // Revoked on a later tick, not straight after click(). The click starts the download
+  // asynchronously, and revoking the URL synchronously pulls the blob away before the browser
+  // has finished reading it — the file arrives truncated or empty, which small files often
+  // survive and larger ones do not.
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
