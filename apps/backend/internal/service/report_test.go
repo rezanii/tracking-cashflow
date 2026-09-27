@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/xuri/excelize/v2"
+	"strings"
 	"testing"
 
 	"github.com/rezanii/tracking-cashflow/apps/backend/internal/dto"
@@ -343,4 +345,56 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// The number format has to be written in Excel's locale-neutral code, where "," is the
+// thousands separator and "." the decimal point whatever the reader's locale. Writing the
+// Indonesian separators literally produces "Rp 1150000,000" in the cell, so the format is
+// asserted against the file rather than the constant.
+func TestCashFlowExcelWritesAUsableCurrencyFormat(t *testing.T) {
+	categories := newFakeCategoryRepository()
+	transactions := newFakeTransactionRepository(categories)
+	seedCashFlow(transactions, categories)
+	service := NewReportService(&fakeReportRepository{}, transactions)
+
+	content, _, err := service.CashFlowExcel(context.Background(), ownerID, septemberFilter())
+	if err != nil {
+		t.Fatalf("CashFlowExcel returned error: %v", err)
+	}
+
+	book, err := excelize.OpenReader(bytes.NewReader(content))
+	if err != nil {
+		t.Fatalf("open workbook: %v", err)
+	}
+	defer func() { _ = book.Close() }()
+
+	sheet := "Transactions"
+	rows, err := book.GetRows(sheet)
+	if err != nil {
+		t.Fatalf("read rows: %v", err)
+	}
+	if len(rows) < 2 {
+		t.Fatalf("expected a header and at least one row, got %d", len(rows))
+	}
+
+	// Column G is Income on the first data row, which sits under the header.
+	styleID, err := book.GetCellStyle(sheet, "G2")
+	if err != nil {
+		t.Fatalf("read cell style: %v", err)
+	}
+	style, err := book.GetStyle(styleID)
+	if err != nil {
+		t.Fatalf("read style: %v", err)
+	}
+	if style.CustomNumFmt == nil {
+		t.Fatal("the amount cell carries no custom number format")
+	}
+	format := *style.CustomNumFmt
+
+	if strings.Contains(format, "#.##0") {
+		t.Fatalf("format %q writes the separators literally; Excel reads . as the decimal point", format)
+	}
+	if !strings.Contains(format, "#,##0") {
+		t.Fatalf("format %q does not use the locale-neutral thousands separator", format)
+	}
 }

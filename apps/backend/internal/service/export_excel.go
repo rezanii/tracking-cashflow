@@ -14,8 +14,18 @@ import (
 const (
 	sheetSummary      = "Summary"
 	sheetTransactions = "Transactions"
-	// currencyFormat renders 1150000 as "Rp 1.150.000,00" using Indonesian separators.
-	currencyFormat = `"Rp" #.##0,00`
+	// currencyFormat renders 1150000 as "Rp 1.150.000" for a reader whose Excel is set to
+	// Indonesian, and "Rp 1,150,000" for one set to English.
+	//
+	// Excel's format codes are locale-neutral: "," always means the thousands separator and
+	// "." the decimal point, whatever the reader's locale, and Excel substitutes the
+	// separators that locale uses when it displays the cell. Writing the Indonesian
+	// separators literally — "#.##0,00" — is read as a decimal point followed by a stray
+	// thousands separator, which is why the cell came out as "Rp 1150000,000".
+	//
+	// No decimals, matching the PDF. The stored value keeps its two, so a cell is rounded for
+	// display only.
+	currencyFormat = `"Rp" #,##0`
 	dateFormat     = "dd/mm/yyyy"
 )
 
